@@ -2,6 +2,7 @@ package tendo
 
 import (
 	"github.com/zoobzio/capitan"
+	"github.com/zoobzio/pipz"
 )
 
 // Custom variants for tendo types.
@@ -259,4 +260,122 @@ var (
 
 	// KeyOutputPadding is the output padding for transposed convolution.
 	KeyOutputPadding = capitan.NewKey[[2]int]("output_padding", VariantIntPair)
+)
+
+// -----------------------------------------------------------------------------
+// Operator Identities
+// -----------------------------------------------------------------------------
+// These are package-level identity constants for tensor operations.
+// All instances of an operator share the same identity since tensor operations
+// are mathematical primitives - the operation type matters, not which instance.
+// Tracing uses capitan signals (above) for runtime correlation.
+
+// Element-wise operation identities.
+var (
+	IdentityAdd    = pipz.NewIdentity("add", "Element-wise addition")
+	IdentitySub    = pipz.NewIdentity("sub", "Element-wise subtraction")
+	IdentityMul    = pipz.NewIdentity("mul", "Element-wise multiplication")
+	IdentityDiv    = pipz.NewIdentity("div", "Element-wise division")
+	IdentityNeg    = pipz.NewIdentity("neg", "Element-wise negation")
+	IdentityAbs    = pipz.NewIdentity("abs", "Element-wise absolute value")
+	IdentityExp    = pipz.NewIdentity("exp", "Element-wise exponential")
+	IdentityLog    = pipz.NewIdentity("log", "Element-wise natural logarithm")
+	IdentitySqrt   = pipz.NewIdentity("sqrt", "Element-wise square root")
+	IdentitySquare = pipz.NewIdentity("square", "Element-wise square")
+	IdentitySign   = pipz.NewIdentity("sign", "Element-wise sign")
+	IdentityPow    = pipz.NewIdentity("pow", "Element-wise power")
+	IdentityClamp  = pipz.NewIdentity("clamp", "Element-wise clamp to range")
+	IdentityWhere  = pipz.NewIdentity("where", "Element-wise conditional selection")
+	IdentitySin    = pipz.NewIdentity("sin", "Element-wise sine")
+	IdentityCos    = pipz.NewIdentity("cos", "Element-wise cosine")
+	IdentityTril   = pipz.NewIdentity("tril", "Lower triangular matrix extraction")
+)
+
+// Activation operation identities.
+var (
+	IdentityReLU       = pipz.NewIdentity("relu", "ReLU activation")
+	IdentitySigmoid    = pipz.NewIdentity("sigmoid", "Sigmoid activation")
+	IdentityTanh       = pipz.NewIdentity("tanh", "Tanh activation")
+	IdentityGELU       = pipz.NewIdentity("gelu", "GELU activation")
+	IdentitySiLU       = pipz.NewIdentity("silu", "SiLU activation")
+	IdentitySoftmax    = pipz.NewIdentity("softmax", "Softmax activation")
+	IdentityLogSoftmax = pipz.NewIdentity("logsoftmax", "Log softmax activation")
+	IdentityLeakyReLU  = pipz.NewIdentity("leaky_relu", "Leaky ReLU activation")
+	IdentityDropout    = pipz.NewIdentity("dropout", "Dropout regularization")
+)
+
+// Matrix operation identities.
+var (
+	IdentityMatMul    = pipz.NewIdentity("matmul", "Matrix multiplication")
+	IdentityTranspose = pipz.NewIdentity("transpose", "Matrix transpose")
+	IdentityT         = pipz.NewIdentity("t", "Transpose last two dimensions")
+)
+
+// Shape operation identities.
+var (
+	IdentityReshape   = pipz.NewIdentity("reshape", "Reshape tensor")
+	IdentityView      = pipz.NewIdentity("view", "View tensor with new shape")
+	IdentitySqueeze   = pipz.NewIdentity("squeeze", "Squeeze dimensions")
+	IdentityUnsqueeze = pipz.NewIdentity("unsqueeze", "Unsqueeze dimension")
+	IdentityFlatten   = pipz.NewIdentity("flatten", "Flatten dimensions")
+	IdentitySlice     = pipz.NewIdentity("slice", "Slice tensor")
+	IdentityNarrow    = pipz.NewIdentity("narrow", "Narrow tensor along dimension")
+	IdentityExpand    = pipz.NewIdentity("expand", "Expand/broadcast tensor")
+	IdentityPermute   = pipz.NewIdentity("permute", "Permute dimensions")
+	IdentityCat       = pipz.NewIdentity("cat", "Concatenate tensors")
+	IdentityStack     = pipz.NewIdentity("stack", "Stack tensors")
+)
+
+// Reduction operation identities.
+var (
+	IdentitySum    = pipz.NewIdentity("sum", "Sum reduction")
+	IdentityMean   = pipz.NewIdentity("mean", "Mean reduction")
+	IdentityMax    = pipz.NewIdentity("max", "Max reduction")
+	IdentityMin    = pipz.NewIdentity("min", "Min reduction")
+	IdentityArgMax = pipz.NewIdentity("argmax", "Argument maximum reduction")
+	IdentityArgMin = pipz.NewIdentity("argmin", "Argument minimum reduction")
+	IdentityVar    = pipz.NewIdentity("var", "Variance reduction")
+	IdentityStd    = pipz.NewIdentity("std", "Standard deviation reduction")
+	IdentityProd   = pipz.NewIdentity("prod", "Product reduction")
+)
+
+// Normalization operation identities.
+var (
+	IdentityBatchNorm2d   = pipz.NewIdentity("batchnorm2d", "Batch normalization over 4D input")
+	IdentityLayerNorm     = pipz.NewIdentity("layernorm", "Layer normalization")
+	IdentityRMSNorm       = pipz.NewIdentity("rmsnorm", "Root mean square normalization")
+	IdentityGroupNorm     = pipz.NewIdentity("groupnorm", "Group normalization")
+	IdentityInstanceNorm2d = pipz.NewIdentity("instancenorm2d", "Instance normalization over 4D input")
+)
+
+// Convolution operation identities.
+var (
+	IdentityConv2d          = pipz.NewIdentity("conv2d", "2D convolution")
+	IdentityConvTranspose2d = pipz.NewIdentity("convtranspose2d", "2D transposed convolution")
+)
+
+// Pooling operation identities.
+var (
+	IdentityMaxPool2d         = pipz.NewIdentity("maxpool2d", "2D max pooling")
+	IdentityAvgPool2d         = pipz.NewIdentity("avgpool2d", "2D average pooling")
+	IdentityAdaptiveAvgPool2d = pipz.NewIdentity("adaptiveavgpool2d", "Adaptive 2D average pooling")
+	IdentityAdaptiveMaxPool2d = pipz.NewIdentity("adaptivemaxpool2d", "Adaptive 2D max pooling")
+)
+
+// Loss function identities.
+var (
+	IdentityMSELoss          = pipz.NewIdentity("mse_loss", "Mean squared error loss")
+	IdentityL1Loss           = pipz.NewIdentity("l1_loss", "L1 loss")
+	IdentityCrossEntropyLoss = pipz.NewIdentity("cross_entropy", "Cross entropy loss")
+	IdentityNLLLoss          = pipz.NewIdentity("nll_loss", "Negative log likelihood loss")
+)
+
+// Embedding operation identities.
+var (
+	IdentityEmbedding = pipz.NewIdentity("embedding", "Embedding lookup")
+)
+
+// Transfer operation identities.
+var (
+	IdentityTransfer = pipz.NewIdentity("transfer", "Device transfer")
 )

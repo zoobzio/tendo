@@ -22,7 +22,7 @@ import (
 //	    normalize,
 //	)
 func Sequence(name string, processors ...pipz.Chainable[*Tensor]) *pipz.Sequence[*Tensor] {
-	return pipz.NewSequence(pipz.Name(name), processors...)
+	return pipz.NewSequence(pipz.NewIdentity(name, "Sequential pipeline"), processors...)
 }
 
 // -----------------------------------------------------------------------------
@@ -42,7 +42,7 @@ func Sequence(name string, processors ...pipz.Chainable[*Tensor]) *pipz.Sequence
 //	    gpuProcessor,
 //	)
 func Filter(name string, predicate func(context.Context, *Tensor) bool, processor pipz.Chainable[*Tensor]) *pipz.Filter[*Tensor] {
-	return pipz.NewFilter(pipz.Name(name), predicate, processor)
+	return pipz.NewFilter(pipz.NewIdentity(name, "Conditional filter"), predicate, processor)
 }
 
 // Switch creates a router that directs tensors to different processors.
@@ -50,13 +50,13 @@ func Filter(name string, predicate func(context.Context, *Tensor) bool, processo
 //
 // Example:
 //
-//	router := tendo.Switch("device-router", func(ctx context.Context, t *tendo.Tensor) tendo.DeviceType {
-//	    return t.Device().Type
+//	router := tendo.Switch("device-router", func(ctx context.Context, t *tendo.Tensor) string {
+//	    return string(t.Device().Type)
 //	})
-//	router.AddRoute(tendo.CPU, cpuProcessor)
-//	router.AddRoute(tendo.CUDA, cudaProcessor)
-func Switch[K comparable](name string, condition func(context.Context, *Tensor) K) *pipz.Switch[*Tensor, K] {
-	return pipz.NewSwitch(pipz.Name(name), condition)
+//	router.AddRoute("cpu", cpuProcessor)
+//	router.AddRoute("cuda", cudaProcessor)
+func Switch(name string, condition func(context.Context, *Tensor) string) *pipz.Switch[*Tensor] {
+	return pipz.NewSwitch(pipz.NewIdentity(name, "Conditional router"), condition)
 }
 
 // -----------------------------------------------------------------------------
@@ -74,7 +74,7 @@ func Switch[K comparable](name string, condition func(context.Context, *Tensor) 
 //	    cpuMatMul,    // Fall back to CPU
 //	)
 func Fallback(name string, processors ...pipz.Chainable[*Tensor]) *pipz.Fallback[*Tensor] {
-	return pipz.NewFallback(pipz.Name(name), processors...)
+	return pipz.NewFallback(pipz.NewIdentity(name, "Fallback chain"), processors...)
 }
 
 // Timeout creates a processor that enforces a time limit on execution.
@@ -85,5 +85,5 @@ func Fallback(name string, processors ...pipz.Chainable[*Tensor]) *pipz.Fallback
 //
 //	bounded := tendo.Timeout("inference", model, 100*time.Millisecond)
 func Timeout(name string, processor pipz.Chainable[*Tensor], duration time.Duration) *pipz.Timeout[*Tensor] {
-	return pipz.NewTimeout(pipz.Name(name), processor, duration)
+	return pipz.NewTimeout(pipz.NewIdentity(name, "Timeout wrapper"), processor, duration)
 }

@@ -16,12 +16,16 @@ var (
 // Transfer is a chainable operator that moves a tensor to a different backend.
 // This is used for explicit device-to-device transfers in pipelines.
 type Transfer struct {
-	target Backend
+	target   Backend
+	identity pipz.Identity
 }
 
 // NewTransfer creates a Transfer operator that moves tensors to the target backend.
 func NewTransfer(target Backend) *Transfer {
-	return &Transfer{target: target}
+	return &Transfer{
+		identity: IdentityTransfer,
+		target:   target,
+	}
 }
 
 // Process transfers the tensor to the target backend.
@@ -46,8 +50,13 @@ func (t *Transfer) Process(ctx context.Context, tensor *Tensor) (*Tensor, error)
 	return result, nil
 }
 
-// Name returns the operator name.
-func (t *Transfer) Name() pipz.Name { return "transfer" }
+// Identity returns the operator identity.
+func (t *Transfer) Identity() pipz.Identity { return t.identity }
+
+// Schema returns the operator schema node.
+func (t *Transfer) Schema() pipz.Node {
+	return pipz.Node{Identity: t.identity, Type: "operator"}
+}
 
 // Close releases any resources held by this operator.
 func (t *Transfer) Close() error { return nil }

@@ -19,7 +19,7 @@ var (
 
 // ToFloat32 returns a Chainable that converts a tensor to Float32.
 func ToFloat32() pipz.Chainable[*Tensor] {
-	return pipz.Apply("to_float32", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+	return pipz.Apply(pipz.NewIdentity("to_float32", "Convert to Float32"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		if t.DType() == Float32 {
 			// Already float32, return as-is
 			return t, nil
@@ -43,7 +43,7 @@ func ToFloat32() pipz.Chainable[*Tensor] {
 
 // ToFloat16 returns a Chainable that converts a tensor to Float16.
 func ToFloat16() pipz.Chainable[*Tensor] {
-	return pipz.Apply("to_float16", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+	return pipz.Apply(pipz.NewIdentity("to_float16", "Convert to Float16"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		if t.DType() == Float16 {
 			return t, nil
 		}
@@ -66,7 +66,7 @@ func ToFloat16() pipz.Chainable[*Tensor] {
 
 // ToBFloat16 returns a Chainable that converts a tensor to BFloat16.
 func ToBFloat16() pipz.Chainable[*Tensor] {
-	return pipz.Apply("to_bfloat16", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+	return pipz.Apply(pipz.NewIdentity("to_bfloat16", "Convert to BFloat16"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		if t.DType() == BFloat16 {
 			return t, nil
 		}
@@ -89,7 +89,7 @@ func ToBFloat16() pipz.Chainable[*Tensor] {
 
 // ToDType returns a Chainable that converts a tensor to the specified dtype.
 func ToDType(dtype DType) pipz.Chainable[*Tensor] {
-	return pipz.Apply("to_dtype", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+	return pipz.Apply(pipz.NewIdentity("to_dtype", "Convert dtype"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		if t.DType() == dtype {
 			return t, nil
 		}

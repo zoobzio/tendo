@@ -10,13 +10,18 @@ import (
 // MatMul is a chainable operator that performs matrix multiplication.
 // Supports 2D matrices and batched matrix multiplication.
 type MatMul struct {
-	backend MatrixOps
-	other   *Tensor
+	backend  MatrixOps
+	other    *Tensor
+	identity pipz.Identity
 }
 
 // NewMatMul creates a MatMul operator.
 func NewMatMul(backend MatrixOps, other *Tensor) *MatMul {
-	return &MatMul{backend: backend, other: other}
+	return &MatMul{
+		identity: IdentityMatMul,
+		backend:  backend,
+		other:    other,
+	}
 }
 
 // Process performs matrix multiplication.
@@ -38,8 +43,13 @@ func (m *MatMul) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (m *MatMul) Name() pipz.Name { return "matmul" }
+// Identity returns the operator identity.
+func (m *MatMul) Identity() pipz.Identity { return m.identity }
+
+// Schema returns the operator schema node.
+func (m *MatMul) Schema() pipz.Node {
+	return pipz.Node{Identity: m.identity, Type: "operator"}
+}
 
 // Close releases any resources held by this operator.
 func (m *MatMul) Close() error { return nil }
@@ -49,13 +59,18 @@ var _ pipz.Chainable[*Tensor] = (*MatMul)(nil)
 // Transpose is a chainable operator that transposes two dimensions.
 // This is a backend-agnostic shape operation (creates a view).
 type Transpose struct {
-	dim0 int
-	dim1 int
+	identity pipz.Identity
+	dim0     int
+	dim1     int
 }
 
 // NewTranspose creates a Transpose operator.
 func NewTranspose(dim0, dim1 int) *Transpose {
-	return &Transpose{dim0: dim0, dim1: dim1}
+	return &Transpose{
+		identity: IdentityTranspose,
+		dim0:     dim0,
+		dim1:     dim1,
+	}
 }
 
 // Process transposes the specified dimensions.
@@ -91,8 +106,13 @@ func (tr *Transpose) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (tr *Transpose) Name() pipz.Name { return "transpose" }
+// Identity returns the operator identity.
+func (tr *Transpose) Identity() pipz.Identity { return tr.identity }
+
+// Schema returns the operator schema node.
+func (tr *Transpose) Schema() pipz.Node {
+	return pipz.Node{Identity: tr.identity, Type: "operator"}
+}
 
 // Close releases any resources held by this operator.
 func (tr *Transpose) Close() error { return nil }
@@ -101,11 +121,15 @@ var _ pipz.Chainable[*Tensor] = (*Transpose)(nil)
 
 // T is a chainable operator that transposes the last two dimensions.
 // Equivalent to Transpose(-2, -1). Backend-agnostic.
-type T struct{}
+type T struct {
+	identity pipz.Identity
+}
 
 // NewT creates a T operator.
 func NewT() *T {
-	return &T{}
+	return &T{
+		identity: IdentityT,
+	}
 }
 
 // Process transposes the last two dimensions.
@@ -146,8 +170,13 @@ func (t *T) Process(ctx context.Context, in *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (t *T) Name() pipz.Name { return "t" }
+// Identity returns the operator identity.
+func (t *T) Identity() pipz.Identity { return t.identity }
+
+// Schema returns the operator schema node.
+func (t *T) Schema() pipz.Node {
+	return pipz.Node{Identity: t.identity, Type: "operator"}
+}
 
 // Close releases any resources held by this operator.
 func (t *T) Close() error { return nil }

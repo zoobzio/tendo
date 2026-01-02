@@ -9,13 +9,18 @@ import (
 
 // Add is a chainable operator that performs element-wise addition.
 type Add struct {
-	backend BinaryOps
-	other   *Tensor
+	backend  BinaryOps
+	other    *Tensor
+	identity pipz.Identity
 }
 
 // NewAdd creates an Add operator.
 func NewAdd(backend BinaryOps, other *Tensor) *Add {
-	return &Add{backend: backend, other: other}
+	return &Add{
+		identity: IdentityAdd,
+		backend:  backend,
+		other:    other,
+	}
 }
 
 // Process performs element-wise addition.
@@ -36,8 +41,11 @@ func (a *Add) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (a *Add) Name() pipz.Name { return "add" }
+// Identity returns the operator identity.
+func (a *Add) Identity() pipz.Identity { return a.identity }
+
+// Schema returns the operator schema.
+func (a *Add) Schema() pipz.Node { return pipz.Node{Identity: a.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (a *Add) Close() error { return nil }
@@ -46,13 +54,18 @@ var _ pipz.Chainable[*Tensor] = (*Add)(nil)
 
 // Sub is a chainable operator that performs element-wise subtraction.
 type Sub struct {
-	backend BinaryOps
-	other   *Tensor
+	backend  BinaryOps
+	other    *Tensor
+	identity pipz.Identity
 }
 
 // NewSub creates a Sub operator.
 func NewSub(backend BinaryOps, other *Tensor) *Sub {
-	return &Sub{backend: backend, other: other}
+	return &Sub{
+		identity: IdentitySub,
+		backend:  backend,
+		other:    other,
+	}
 }
 
 // Process performs element-wise subtraction.
@@ -73,8 +86,11 @@ func (s *Sub) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (s *Sub) Name() pipz.Name { return "sub" }
+// Identity returns the operator identity.
+func (s *Sub) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Sub) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Sub) Close() error { return nil }
@@ -83,13 +99,18 @@ var _ pipz.Chainable[*Tensor] = (*Sub)(nil)
 
 // Mul is a chainable operator that performs element-wise multiplication.
 type Mul struct {
-	backend BinaryOps
-	other   *Tensor
+	backend  BinaryOps
+	other    *Tensor
+	identity pipz.Identity
 }
 
 // NewMul creates a Mul operator.
 func NewMul(backend BinaryOps, other *Tensor) *Mul {
-	return &Mul{backend: backend, other: other}
+	return &Mul{
+		identity: IdentityMul,
+		backend:  backend,
+		other:    other,
+	}
 }
 
 // Process performs element-wise multiplication.
@@ -110,8 +131,11 @@ func (m *Mul) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (m *Mul) Name() pipz.Name { return "mul" }
+// Identity returns the operator identity.
+func (m *Mul) Identity() pipz.Identity { return m.identity }
+
+// Schema returns the operator schema.
+func (m *Mul) Schema() pipz.Node { return pipz.Node{Identity: m.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (m *Mul) Close() error { return nil }
@@ -120,13 +144,18 @@ var _ pipz.Chainable[*Tensor] = (*Mul)(nil)
 
 // Div is a chainable operator that performs element-wise division.
 type Div struct {
-	backend BinaryOps
-	other   *Tensor
+	backend  BinaryOps
+	other    *Tensor
+	identity pipz.Identity
 }
 
 // NewDiv creates a Div operator.
 func NewDiv(backend BinaryOps, other *Tensor) *Div {
-	return &Div{backend: backend, other: other}
+	return &Div{
+		identity: IdentityDiv,
+		backend:  backend,
+		other:    other,
+	}
 }
 
 // Process performs element-wise division.
@@ -147,8 +176,11 @@ func (d *Div) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (d *Div) Name() pipz.Name { return "div" }
+// Identity returns the operator identity.
+func (d *Div) Identity() pipz.Identity { return d.identity }
+
+// Schema returns the operator schema.
+func (d *Div) Schema() pipz.Node { return pipz.Node{Identity: d.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (d *Div) Close() error { return nil }
@@ -157,12 +189,16 @@ var _ pipz.Chainable[*Tensor] = (*Div)(nil)
 
 // Neg is a chainable operator that negates each element.
 type Neg struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewNeg creates a Neg operator.
 func NewNeg(backend UnaryOps) *Neg {
-	return &Neg{backend: backend}
+	return &Neg{
+		identity: IdentityNeg,
+		backend:  backend,
+	}
 }
 
 // Process negates each element.
@@ -182,8 +218,11 @@ func (n *Neg) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (n *Neg) Name() pipz.Name { return "neg" }
+// Identity returns the operator identity.
+func (n *Neg) Identity() pipz.Identity { return n.identity }
+
+// Schema returns the operator schema.
+func (n *Neg) Schema() pipz.Node { return pipz.Node{Identity: n.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (n *Neg) Close() error { return nil }
@@ -192,12 +231,16 @@ var _ pipz.Chainable[*Tensor] = (*Neg)(nil)
 
 // Abs is a chainable operator that takes the absolute value of each element.
 type Abs struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewAbs creates an Abs operator.
 func NewAbs(backend UnaryOps) *Abs {
-	return &Abs{backend: backend}
+	return &Abs{
+		identity: IdentityAbs,
+		backend:  backend,
+	}
 }
 
 // Process computes the absolute value of each element.
@@ -217,8 +260,11 @@ func (a *Abs) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (a *Abs) Name() pipz.Name { return "abs" }
+// Identity returns the operator identity.
+func (a *Abs) Identity() pipz.Identity { return a.identity }
+
+// Schema returns the operator schema.
+func (a *Abs) Schema() pipz.Node { return pipz.Node{Identity: a.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (a *Abs) Close() error { return nil }
@@ -227,12 +273,16 @@ var _ pipz.Chainable[*Tensor] = (*Abs)(nil)
 
 // Exp is a chainable operator that computes e^x for each element.
 type Exp struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewExp creates an Exp operator.
 func NewExp(backend UnaryOps) *Exp {
-	return &Exp{backend: backend}
+	return &Exp{
+		identity: IdentityExp,
+		backend:  backend,
+	}
 }
 
 // Process computes e^x for each element.
@@ -252,8 +302,11 @@ func (e *Exp) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (e *Exp) Name() pipz.Name { return "exp" }
+// Identity returns the operator identity.
+func (e *Exp) Identity() pipz.Identity { return e.identity }
+
+// Schema returns the operator schema.
+func (e *Exp) Schema() pipz.Node { return pipz.Node{Identity: e.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (e *Exp) Close() error { return nil }
@@ -262,12 +315,16 @@ var _ pipz.Chainable[*Tensor] = (*Exp)(nil)
 
 // Log is a chainable operator that computes the natural logarithm of each element.
 type Log struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewLog creates a Log operator.
 func NewLog(backend UnaryOps) *Log {
-	return &Log{backend: backend}
+	return &Log{
+		identity: IdentityLog,
+		backend:  backend,
+	}
 }
 
 // Process computes the natural logarithm of each element.
@@ -287,8 +344,11 @@ func (l *Log) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (l *Log) Name() pipz.Name { return "log" }
+// Identity returns the operator identity.
+func (l *Log) Identity() pipz.Identity { return l.identity }
+
+// Schema returns the operator schema.
+func (l *Log) Schema() pipz.Node { return pipz.Node{Identity: l.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (l *Log) Close() error { return nil }
@@ -297,12 +357,16 @@ var _ pipz.Chainable[*Tensor] = (*Log)(nil)
 
 // Sqrt is a chainable operator that computes the square root of each element.
 type Sqrt struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewSqrt creates a Sqrt operator.
 func NewSqrt(backend UnaryOps) *Sqrt {
-	return &Sqrt{backend: backend}
+	return &Sqrt{
+		identity: IdentitySqrt,
+		backend:  backend,
+	}
 }
 
 // Process computes the square root of each element.
@@ -322,8 +386,11 @@ func (s *Sqrt) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (s *Sqrt) Name() pipz.Name { return "sqrt" }
+// Identity returns the operator identity.
+func (s *Sqrt) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Sqrt) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Sqrt) Close() error { return nil }
@@ -332,12 +399,16 @@ var _ pipz.Chainable[*Tensor] = (*Sqrt)(nil)
 
 // Square is a chainable operator that squares each element.
 type Square struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewSquare creates a Square operator.
 func NewSquare(backend UnaryOps) *Square {
-	return &Square{backend: backend}
+	return &Square{
+		identity: IdentitySquare,
+		backend:  backend,
+	}
 }
 
 // Process squares each element.
@@ -357,8 +428,11 @@ func (s *Square) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (s *Square) Name() pipz.Name { return "square" }
+// Identity returns the operator identity.
+func (s *Square) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Square) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Square) Close() error { return nil }
@@ -368,12 +442,16 @@ var _ pipz.Chainable[*Tensor] = (*Square)(nil)
 // Sign is a chainable operator that computes the sign of each element.
 // Returns -1 for negative, 0 for zero, 1 for positive.
 type Sign struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewSign creates a Sign operator.
 func NewSign(backend UnaryOps) *Sign {
-	return &Sign{backend: backend}
+	return &Sign{
+		identity: IdentitySign,
+		backend:  backend,
+	}
 }
 
 // Process computes the sign of each element.
@@ -394,8 +472,11 @@ func (s *Sign) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (s *Sign) Name() pipz.Name { return "sign" }
+// Identity returns the operator identity.
+func (s *Sign) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Sign) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Sign) Close() error { return nil }
@@ -403,14 +484,19 @@ func (s *Sign) Close() error { return nil }
 var _ pipz.Chainable[*Tensor] = (*Sign)(nil)
 
 // Pow is a chainable operator that raises each element to a power.
-type Pow struct {
-	backend BinaryOps
-	exp     float32
+type Pow struct { //nolint:govet // field alignment is less important than readability
+	backend  BinaryOps
+	identity pipz.Identity
+	exp      float32
 }
 
 // NewPow creates a Pow operator.
 func NewPow(backend BinaryOps, exp float32) *Pow {
-	return &Pow{backend: backend, exp: exp}
+	return &Pow{
+		identity: IdentityPow,
+		backend:  backend,
+		exp:      exp,
+	}
 }
 
 // Process raises each element to the power.
@@ -431,8 +517,11 @@ func (p *Pow) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (p *Pow) Name() pipz.Name { return "pow" }
+// Identity returns the operator identity.
+func (p *Pow) Identity() pipz.Identity { return p.identity }
+
+// Schema returns the operator schema.
+func (p *Pow) Schema() pipz.Node { return pipz.Node{Identity: p.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (p *Pow) Close() error { return nil }
@@ -440,15 +529,21 @@ func (p *Pow) Close() error { return nil }
 var _ pipz.Chainable[*Tensor] = (*Pow)(nil)
 
 // Clamp is a chainable operator that clamps values to a range.
-type Clamp struct {
-	backend CompareOps
-	min     float32
-	max     float32
+type Clamp struct { //nolint:govet // field alignment is less important than readability
+	backend  CompareOps
+	min      float32
+	max      float32
+	identity pipz.Identity
 }
 
 // NewClamp creates a Clamp operator.
 func NewClamp(backend CompareOps, minVal, maxVal float32) *Clamp {
-	return &Clamp{backend: backend, min: minVal, max: maxVal}
+	return &Clamp{
+		identity: IdentityClamp,
+		backend:  backend,
+		min:      minVal,
+		max:      maxVal,
+	}
 }
 
 // Process clamps values to [min, max].
@@ -470,8 +565,11 @@ func (c *Clamp) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (c *Clamp) Name() pipz.Name { return "clamp" }
+// Identity returns the operator identity.
+func (c *Clamp) Identity() pipz.Identity { return c.identity }
+
+// Schema returns the operator schema.
+func (c *Clamp) Schema() pipz.Node { return pipz.Node{Identity: c.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (c *Clamp) Close() error { return nil }
@@ -484,11 +582,17 @@ type Where struct {
 	backend   CompareOps
 	condition *Tensor
 	other     *Tensor
+	identity  pipz.Identity
 }
 
 // NewWhere creates a Where operator.
 func NewWhere(backend CompareOps, condition, other *Tensor) *Where {
-	return &Where{backend: backend, condition: condition, other: other}
+	return &Where{
+		identity:  IdentityWhere,
+		backend:   backend,
+		condition: condition,
+		other:     other,
+	}
 }
 
 // Process selects elements based on the condition.
@@ -510,8 +614,11 @@ func (w *Where) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (w *Where) Name() pipz.Name { return "where" }
+// Identity returns the operator identity.
+func (w *Where) Identity() pipz.Identity { return w.identity }
+
+// Schema returns the operator schema.
+func (w *Where) Schema() pipz.Node { return pipz.Node{Identity: w.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (w *Where) Close() error { return nil }
@@ -520,12 +627,16 @@ var _ pipz.Chainable[*Tensor] = (*Where)(nil)
 
 // Sin is a chainable operator that computes the sine of each element.
 type Sin struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewSin creates a Sin operator.
 func NewSin(backend UnaryOps) *Sin {
-	return &Sin{backend: backend}
+	return &Sin{
+		identity: IdentitySin,
+		backend:  backend,
+	}
 }
 
 // Process computes the sine of each element.
@@ -545,8 +656,11 @@ func (s *Sin) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (s *Sin) Name() pipz.Name { return "sin" }
+// Identity returns the operator identity.
+func (s *Sin) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Sin) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Sin) Close() error { return nil }
@@ -555,12 +669,16 @@ var _ pipz.Chainable[*Tensor] = (*Sin)(nil)
 
 // Cos is a chainable operator that computes the cosine of each element.
 type Cos struct {
-	backend UnaryOps
+	backend  UnaryOps
+	identity pipz.Identity
 }
 
 // NewCos creates a Cos operator.
 func NewCos(backend UnaryOps) *Cos {
-	return &Cos{backend: backend}
+	return &Cos{
+		identity: IdentityCos,
+		backend:  backend,
+	}
 }
 
 // Process computes the cosine of each element.
@@ -580,8 +698,11 @@ func (c *Cos) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (c *Cos) Name() pipz.Name { return "cos" }
+// Identity returns the operator identity.
+func (c *Cos) Identity() pipz.Identity { return c.identity }
+
+// Schema returns the operator schema.
+func (c *Cos) Schema() pipz.Node { return pipz.Node{Identity: c.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (c *Cos) Close() error { return nil }
@@ -591,14 +712,19 @@ var _ pipz.Chainable[*Tensor] = (*Cos)(nil)
 // Tril is a chainable operator that returns the lower triangular part of a 2D tensor.
 // Elements above diagonal + k are zeroed.
 // k=0: main diagonal, k<0: below, k>0: above.
-type Tril struct {
-	backend CompareOps
-	k       int
+type Tril struct { //nolint:govet // field alignment is less important than readability
+	backend  CompareOps
+	k        int
+	identity pipz.Identity
 }
 
 // NewTril creates a Tril operator.
 func NewTril(backend CompareOps, k int) *Tril {
-	return &Tril{backend: backend, k: k}
+	return &Tril{
+		identity: IdentityTril,
+		backend:  backend,
+		k:        k,
+	}
 }
 
 // Process returns the lower triangular part of the input.
@@ -619,8 +745,11 @@ func (tr *Tril) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (tr *Tril) Name() pipz.Name { return "tril" }
+// Identity returns the operator identity.
+func (tr *Tril) Identity() pipz.Identity { return tr.identity }
+
+// Schema returns the operator schema.
+func (tr *Tril) Schema() pipz.Node { return pipz.Node{Identity: tr.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (tr *Tril) Close() error { return nil }

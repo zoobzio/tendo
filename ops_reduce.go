@@ -10,14 +10,20 @@ import (
 // Sum is a chainable operator that sums elements along dimensions.
 // If no dimensions are specified, sums all elements.
 type Sum struct {
-	backend ReduceOps
-	dims    []int
-	keepdim bool
+	identity pipz.Identity
+	backend  ReduceOps
+	dims     []int
+	keepdim  bool
 }
 
 // NewSum creates a Sum operator.
 func NewSum(backend ReduceOps, keepdim bool, dims ...int) *Sum {
-	return &Sum{backend: backend, dims: dims, keepdim: keepdim}
+	return &Sum{
+		identity: IdentitySum,
+		backend:  backend,
+		dims:     dims,
+		keepdim:  keepdim,
+	}
 }
 
 // Process sums elements along the specified dimensions.
@@ -38,8 +44,11 @@ func (s *Sum) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (s *Sum) Name() pipz.Name { return "sum" }
+// Identity returns the operator identity.
+func (s *Sum) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Sum) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Sum) Close() error { return nil }
@@ -49,14 +58,20 @@ var _ pipz.Chainable[*Tensor] = (*Sum)(nil)
 // Mean is a chainable operator that computes the mean along dimensions.
 // If no dimensions are specified, computes mean of all elements.
 type Mean struct {
-	backend ReduceOps
-	dims    []int
-	keepdim bool
+	identity pipz.Identity
+	backend  ReduceOps
+	dims     []int
+	keepdim  bool
 }
 
 // NewMean creates a Mean operator.
 func NewMean(backend ReduceOps, keepdim bool, dims ...int) *Mean {
-	return &Mean{backend: backend, dims: dims, keepdim: keepdim}
+	return &Mean{
+		identity: IdentityMean,
+		backend:  backend,
+		dims:     dims,
+		keepdim:  keepdim,
+	}
 }
 
 // Process computes the mean along the specified dimensions.
@@ -77,8 +92,11 @@ func (m *Mean) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (m *Mean) Name() pipz.Name { return "mean" }
+// Identity returns the operator identity.
+func (m *Mean) Identity() pipz.Identity { return m.identity }
+
+// Schema returns the operator schema.
+func (m *Mean) Schema() pipz.Node { return pipz.Node{Identity: m.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (m *Mean) Close() error { return nil }
@@ -88,14 +106,20 @@ var _ pipz.Chainable[*Tensor] = (*Mean)(nil)
 // Max is a chainable operator that computes the maximum along dimensions.
 // If no dimensions are specified, computes max of all elements.
 type Max struct {
-	backend ReduceOps
-	dims    []int
-	keepdim bool
+	identity pipz.Identity
+	backend  ReduceOps
+	dims     []int
+	keepdim  bool
 }
 
 // NewMax creates a Max operator.
 func NewMax(backend ReduceOps, keepdim bool, dims ...int) *Max {
-	return &Max{backend: backend, dims: dims, keepdim: keepdim}
+	return &Max{
+		identity: IdentityMax,
+		backend:  backend,
+		dims:     dims,
+		keepdim:  keepdim,
+	}
 }
 
 // Process computes the maximum along the specified dimensions.
@@ -116,8 +140,11 @@ func (m *Max) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (m *Max) Name() pipz.Name { return "max" }
+// Identity returns the operator identity.
+func (m *Max) Identity() pipz.Identity { return m.identity }
+
+// Schema returns the operator schema.
+func (m *Max) Schema() pipz.Node { return pipz.Node{Identity: m.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (m *Max) Close() error { return nil }
@@ -127,14 +154,20 @@ var _ pipz.Chainable[*Tensor] = (*Max)(nil)
 // Min is a chainable operator that computes the minimum along dimensions.
 // If no dimensions are specified, computes min of all elements.
 type Min struct {
-	backend ReduceOps
-	dims    []int
-	keepdim bool
+	identity pipz.Identity
+	backend  ReduceOps
+	dims     []int
+	keepdim  bool
 }
 
 // NewMin creates a Min operator.
 func NewMin(backend ReduceOps, keepdim bool, dims ...int) *Min {
-	return &Min{backend: backend, dims: dims, keepdim: keepdim}
+	return &Min{
+		identity: IdentityMin,
+		backend:  backend,
+		dims:     dims,
+		keepdim:  keepdim,
+	}
 }
 
 // Process computes the minimum along the specified dimensions.
@@ -155,8 +188,11 @@ func (m *Min) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (m *Min) Name() pipz.Name { return "min" }
+// Identity returns the operator identity.
+func (m *Min) Identity() pipz.Identity { return m.identity }
+
+// Schema returns the operator schema.
+func (m *Min) Schema() pipz.Node { return pipz.Node{Identity: m.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (m *Min) Close() error { return nil }
@@ -164,15 +200,21 @@ func (m *Min) Close() error { return nil }
 var _ pipz.Chainable[*Tensor] = (*Min)(nil)
 
 // ArgMax is a chainable operator that returns indices of max values along a dimension.
-type ArgMax struct {
-	backend ReduceOps
-	dim     int
-	keepdim bool
+type ArgMax struct { //nolint:govet // field alignment is less important than readability
+	backend  ReduceOps
+	dim      int
+	keepdim  bool
+	identity pipz.Identity
 }
 
 // NewArgMax creates an ArgMax operator.
 func NewArgMax(backend ReduceOps, dim int, keepdim bool) *ArgMax {
-	return &ArgMax{backend: backend, dim: dim, keepdim: keepdim}
+	return &ArgMax{
+		identity: IdentityArgMax,
+		backend:  backend,
+		dim:      dim,
+		keepdim:  keepdim,
+	}
 }
 
 // Process computes indices of max values along the dimension.
@@ -194,8 +236,11 @@ func (a *ArgMax) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (a *ArgMax) Name() pipz.Name { return "argmax" }
+// Identity returns the operator identity.
+func (a *ArgMax) Identity() pipz.Identity { return a.identity }
+
+// Schema returns the operator schema.
+func (a *ArgMax) Schema() pipz.Node { return pipz.Node{Identity: a.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (a *ArgMax) Close() error { return nil }
@@ -203,15 +248,21 @@ func (a *ArgMax) Close() error { return nil }
 var _ pipz.Chainable[*Tensor] = (*ArgMax)(nil)
 
 // ArgMin is a chainable operator that returns indices of min values along a dimension.
-type ArgMin struct {
-	backend ReduceOps
-	dim     int
-	keepdim bool
+type ArgMin struct { //nolint:govet // field alignment is less important than readability
+	backend  ReduceOps
+	dim      int
+	keepdim  bool
+	identity pipz.Identity
 }
 
 // NewArgMin creates an ArgMin operator.
 func NewArgMin(backend ReduceOps, dim int, keepdim bool) *ArgMin {
-	return &ArgMin{backend: backend, dim: dim, keepdim: keepdim}
+	return &ArgMin{
+		identity: IdentityArgMin,
+		backend:  backend,
+		dim:      dim,
+		keepdim:  keepdim,
+	}
 }
 
 // Process computes indices of min values along the dimension.
@@ -233,8 +284,11 @@ func (a *ArgMin) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (a *ArgMin) Name() pipz.Name { return "argmin" }
+// Identity returns the operator identity.
+func (a *ArgMin) Identity() pipz.Identity { return a.identity }
+
+// Schema returns the operator schema.
+func (a *ArgMin) Schema() pipz.Node { return pipz.Node{Identity: a.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (a *ArgMin) Close() error { return nil }
@@ -244,6 +298,7 @@ var _ pipz.Chainable[*Tensor] = (*ArgMin)(nil)
 // Var is a chainable operator that computes variance along dimensions.
 // Uses Bessel's correction (N-1) by default for unbiased estimation.
 type Var struct {
+	identity   pipz.Identity
 	backend    ReduceOps
 	dims       []int
 	keepdim    bool
@@ -252,7 +307,13 @@ type Var struct {
 
 // NewVar creates a Var operator.
 func NewVar(backend ReduceOps, keepdim bool, correction int, dims ...int) *Var {
-	return &Var{backend: backend, dims: dims, keepdim: keepdim, correction: correction}
+	return &Var{
+		identity:   IdentityVar,
+		backend:    backend,
+		dims:       dims,
+		keepdim:    keepdim,
+		correction: correction,
+	}
 }
 
 // Process computes variance along the specified dimensions.
@@ -273,8 +334,11 @@ func (v *Var) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (v *Var) Name() pipz.Name { return "var" }
+// Identity returns the operator identity.
+func (v *Var) Identity() pipz.Identity { return v.identity }
+
+// Schema returns the operator schema.
+func (v *Var) Schema() pipz.Node { return pipz.Node{Identity: v.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (v *Var) Close() error { return nil }
@@ -284,6 +348,7 @@ var _ pipz.Chainable[*Tensor] = (*Var)(nil)
 // Std is a chainable operator that computes standard deviation along dimensions.
 // Uses Bessel's correction (N-1) by default for unbiased estimation.
 type Std struct {
+	identity   pipz.Identity
 	backend    ReduceOps
 	dims       []int
 	keepdim    bool
@@ -292,7 +357,13 @@ type Std struct {
 
 // NewStd creates a Std operator.
 func NewStd(backend ReduceOps, keepdim bool, correction int, dims ...int) *Std {
-	return &Std{backend: backend, dims: dims, keepdim: keepdim, correction: correction}
+	return &Std{
+		identity:   IdentityStd,
+		backend:    backend,
+		dims:       dims,
+		keepdim:    keepdim,
+		correction: correction,
+	}
 }
 
 // Process computes standard deviation along the specified dimensions.
@@ -313,8 +384,11 @@ func (s *Std) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (s *Std) Name() pipz.Name { return "std" }
+// Identity returns the operator identity.
+func (s *Std) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Std) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Std) Close() error { return nil }
@@ -324,14 +398,20 @@ var _ pipz.Chainable[*Tensor] = (*Std)(nil)
 // Prod is a chainable operator that computes the product along dimensions.
 // If no dimensions are specified, computes product of all elements.
 type Prod struct {
-	backend ReduceOps
-	dims    []int
-	keepdim bool
+	identity pipz.Identity
+	backend  ReduceOps
+	dims     []int
+	keepdim  bool
 }
 
 // NewProd creates a Prod operator.
 func NewProd(backend ReduceOps, keepdim bool, dims ...int) *Prod {
-	return &Prod{backend: backend, dims: dims, keepdim: keepdim}
+	return &Prod{
+		identity: IdentityProd,
+		backend:  backend,
+		dims:     dims,
+		keepdim:  keepdim,
+	}
 }
 
 // Process computes the product along the specified dimensions.
@@ -352,8 +432,11 @@ func (p *Prod) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return out, nil
 }
 
-// Name returns the operator name.
-func (p *Prod) Name() pipz.Name { return "prod" }
+// Identity returns the operator identity.
+func (p *Prod) Identity() pipz.Identity { return p.identity }
+
+// Schema returns the operator schema.
+func (p *Prod) Schema() pipz.Node { return pipz.Node{Identity: p.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (p *Prod) Close() error { return nil }

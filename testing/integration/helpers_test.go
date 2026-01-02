@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/zoobzio/pipz"
 	"github.com/zoobzio/tendo"
 	tt "github.com/zoobzio/tendo/testing"
 )
@@ -453,7 +454,7 @@ func TestCloneInPipeline(t *testing.T) {
 	input := tt.RangeWithShape(4)
 
 	// Process through pipeline that clones
-	clone := tendo.Transform("clone", func(ctx context.Context, t *tendo.Tensor) *tendo.Tensor {
+	clone := tendo.Transform(pipz.NewIdentity("clone", "Clone tensor"), func(ctx context.Context, t *tendo.Tensor) *tendo.Tensor {
 		return t.Clone()
 	})
 

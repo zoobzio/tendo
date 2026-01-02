@@ -15,14 +15,19 @@ import (
 // The input tensor to Process should contain integer indices (stored as float32).
 // Each index looks up the corresponding row in the weight matrix.
 type Embedding struct {
-	backend EmbeddingOps
-	weight  *Tensor
+	backend  EmbeddingOps
+	weight   *Tensor
+	identity pipz.Identity
 }
 
 // NewEmbedding creates an Embedding operator.
 // weight is the embedding table with shape [vocab_size, embed_dim].
 func NewEmbedding(backend EmbeddingOps, weight *Tensor) *Embedding {
-	return &Embedding{backend: backend, weight: weight}
+	return &Embedding{
+		identity: IdentityEmbedding,
+		backend:  backend,
+		weight:   weight,
+	}
 }
 
 // Process performs embedding lookup.
@@ -44,8 +49,13 @@ func (e *Embedding) Process(ctx context.Context, indices *Tensor) (*Tensor, erro
 	return result, nil
 }
 
-// Name returns the operator name.
-func (e *Embedding) Name() pipz.Name { return "embedding" }
+// Identity returns the operator identity.
+func (e *Embedding) Identity() pipz.Identity { return e.identity }
+
+// Schema returns the operator schema node.
+func (e *Embedding) Schema() pipz.Node {
+	return pipz.Node{Identity: e.identity, Type: "operator"}
+}
 
 // Close releases any resources held by this operator.
 func (e *Embedding) Close() error { return nil }

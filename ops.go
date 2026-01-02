@@ -121,20 +121,20 @@ func propagateTape(input, output *Tensor, opName string, saved map[string]*Tenso
 
 // Op creates a named Chainable operation that can fail.
 // This is a convenience wrapper around pipz.Apply.
-func Op(name pipz.Name, fn func(context.Context, *Tensor) (*Tensor, error)) pipz.Chainable[*Tensor] {
-	return pipz.Apply(name, fn)
+func Op(identity pipz.Identity, fn func(context.Context, *Tensor) (*Tensor, error)) pipz.Chainable[*Tensor] {
+	return pipz.Apply(identity, fn)
 }
 
 // Transform creates a named Chainable operation that cannot fail.
 // This is a convenience wrapper around pipz.Transform.
-func Transform(name pipz.Name, fn func(context.Context, *Tensor) *Tensor) pipz.Chainable[*Tensor] {
-	return pipz.Transform(name, fn)
+func Transform(identity pipz.Identity, fn func(context.Context, *Tensor) *Tensor) pipz.Chainable[*Tensor] {
+	return pipz.Transform(identity, fn)
 }
 
 // UnaryOp creates a unary tensor operation with the given name, signal, and compute function.
 // The compute function operates on CPU storage directly.
-func UnaryOp(name pipz.Name, fn func(*CPUStorage) *CPUStorage) pipz.Chainable[*Tensor] {
-	return pipz.Apply(name, func(ctx context.Context, t *Tensor) (*Tensor, error) {
+func UnaryOp(identity pipz.Identity, fn func(*CPUStorage) *CPUStorage) pipz.Chainable[*Tensor] {
+	return pipz.Apply(identity, func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		// Get CPU storage (for now, only CPU is supported)
 		cpu, ok := t.storage.(*CPUStorage)
 		if !ok {
@@ -152,8 +152,8 @@ func UnaryOp(name pipz.Name, fn func(*CPUStorage) *CPUStorage) pipz.Chainable[*T
 }
 
 // UnaryOpGeneric creates a unary tensor operation that works with any CPU storage.
-func UnaryOpGeneric(name pipz.Name, fn func(CPUDataAccessor) *CPUStorage) pipz.Chainable[*Tensor] {
-	return pipz.Apply(name, func(ctx context.Context, t *Tensor) (*Tensor, error) {
+func UnaryOpGeneric(identity pipz.Identity, fn func(CPUDataAccessor) *CPUStorage) pipz.Chainable[*Tensor] {
+	return pipz.Apply(identity, func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		cpu, ok := t.storage.(CPUDataAccessor)
 		if !ok {
 			return nil, &DeviceError{Expected: CPU, Got: t.Device().Type}
@@ -168,8 +168,8 @@ func UnaryOpGeneric(name pipz.Name, fn func(CPUDataAccessor) *CPUStorage) pipz.C
 
 // UnaryOpInPlace creates an in-place unary tensor operation.
 // The input tensor is modified and returned.
-func UnaryOpInPlace(name pipz.Name, fn func(*CPUStorage)) pipz.Chainable[*Tensor] {
-	return pipz.Transform(name, func(_ context.Context, t *Tensor) *Tensor {
+func UnaryOpInPlace(identity pipz.Identity, fn func(*CPUStorage)) pipz.Chainable[*Tensor] {
+	return pipz.Transform(identity, func(_ context.Context, t *Tensor) *Tensor {
 		if cpu, ok := t.storage.(*CPUStorage); ok {
 			fn(cpu)
 		}
@@ -179,8 +179,8 @@ func UnaryOpInPlace(name pipz.Name, fn func(*CPUStorage)) pipz.Chainable[*Tensor
 
 // BinaryOp creates a binary tensor operation with the given name.
 // The second operand is captured in the closure.
-func BinaryOp(name pipz.Name, other *Tensor, fn func(*CPUStorage, *CPUStorage, []int) *CPUStorage) pipz.Chainable[*Tensor] {
-	return pipz.Apply(name, func(ctx context.Context, t *Tensor) (*Tensor, error) {
+func BinaryOp(identity pipz.Identity, other *Tensor, fn func(*CPUStorage, *CPUStorage, []int) *CPUStorage) pipz.Chainable[*Tensor] {
+	return pipz.Apply(identity, func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		// Validate devices match
 		if t.Device() != other.Device() {
 			return nil, &DeviceMismatchError{A: t.Device(), B: other.Device()}

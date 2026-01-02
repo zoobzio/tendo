@@ -17,6 +17,7 @@ const (
 // MSELoss is a chainable operator that computes mean squared error loss.
 // MSE = (1/n) * sum((input - target)^2) for reduction="mean".
 type MSELoss struct {
+	identity  pipz.Identity
 	backend   LossOps
 	target    *Tensor
 	reduction string
@@ -24,7 +25,12 @@ type MSELoss struct {
 
 // NewMSELoss creates an MSELoss operator.
 func NewMSELoss(backend LossOps, target *Tensor, reduction string) *MSELoss {
-	return &MSELoss{backend: backend, target: target, reduction: reduction}
+	return &MSELoss{
+		identity:  IdentityMSELoss,
+		backend:   backend,
+		target:    target,
+		reduction: reduction,
+	}
 }
 
 // Process computes MSE loss.
@@ -46,8 +52,11 @@ func (m *MSELoss) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (m *MSELoss) Name() pipz.Name { return "mse_loss" }
+// Identity returns the operator identity.
+func (m *MSELoss) Identity() pipz.Identity { return m.identity }
+
+// Schema returns the operator schema.
+func (m *MSELoss) Schema() pipz.Node { return pipz.Node{Identity: m.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (m *MSELoss) Close() error { return nil }
@@ -57,6 +66,7 @@ var _ pipz.Chainable[*Tensor] = (*MSELoss)(nil)
 // L1Loss is a chainable operator that computes L1 (mean absolute error) loss.
 // L1 = (1/n) * sum(|input - target|) for reduction="mean".
 type L1Loss struct {
+	identity  pipz.Identity
 	backend   LossOps
 	target    *Tensor
 	reduction string
@@ -64,7 +74,12 @@ type L1Loss struct {
 
 // NewL1Loss creates an L1Loss operator.
 func NewL1Loss(backend LossOps, target *Tensor, reduction string) *L1Loss {
-	return &L1Loss{backend: backend, target: target, reduction: reduction}
+	return &L1Loss{
+		identity:  IdentityL1Loss,
+		backend:   backend,
+		target:    target,
+		reduction: reduction,
+	}
 }
 
 // Process computes L1 loss.
@@ -86,8 +101,11 @@ func (l *L1Loss) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (l *L1Loss) Name() pipz.Name { return "l1_loss" }
+// Identity returns the operator identity.
+func (l *L1Loss) Identity() pipz.Identity { return l.identity }
+
+// Schema returns the operator schema.
+func (l *L1Loss) Schema() pipz.Node { return pipz.Node{Identity: l.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (l *L1Loss) Close() error { return nil }
@@ -99,6 +117,7 @@ var _ pipz.Chainable[*Tensor] = (*L1Loss)(nil)
 // Target: [N] class indices (integers as float32)
 // Loss = -log(softmax(input)[target]).
 type CrossEntropyLoss struct {
+	identity  pipz.Identity
 	backend   LossOps
 	target    *Tensor
 	reduction string
@@ -106,7 +125,12 @@ type CrossEntropyLoss struct {
 
 // NewCrossEntropyLoss creates a CrossEntropyLoss operator.
 func NewCrossEntropyLoss(backend LossOps, target *Tensor, reduction string) *CrossEntropyLoss {
-	return &CrossEntropyLoss{backend: backend, target: target, reduction: reduction}
+	return &CrossEntropyLoss{
+		identity:  IdentityCrossEntropyLoss,
+		backend:   backend,
+		target:    target,
+		reduction: reduction,
+	}
 }
 
 // Process computes cross-entropy loss.
@@ -128,8 +152,11 @@ func (c *CrossEntropyLoss) Process(ctx context.Context, input *Tensor) (*Tensor,
 	return result, nil
 }
 
-// Name returns the operator name.
-func (c *CrossEntropyLoss) Name() pipz.Name { return "cross_entropy_loss" }
+// Identity returns the operator identity.
+func (c *CrossEntropyLoss) Identity() pipz.Identity { return c.identity }
+
+// Schema returns the operator schema.
+func (c *CrossEntropyLoss) Schema() pipz.Node { return pipz.Node{Identity: c.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (c *CrossEntropyLoss) Close() error { return nil }
@@ -141,6 +168,7 @@ var _ pipz.Chainable[*Tensor] = (*CrossEntropyLoss)(nil)
 // Target: [N] class indices (integers as float32)
 // Loss = -input[target].
 type NLLLoss struct {
+	identity  pipz.Identity
 	backend   LossOps
 	target    *Tensor
 	reduction string
@@ -148,7 +176,12 @@ type NLLLoss struct {
 
 // NewNLLLoss creates an NLLLoss operator.
 func NewNLLLoss(backend LossOps, target *Tensor, reduction string) *NLLLoss {
-	return &NLLLoss{backend: backend, target: target, reduction: reduction}
+	return &NLLLoss{
+		identity:  IdentityNLLLoss,
+		backend:   backend,
+		target:    target,
+		reduction: reduction,
+	}
 }
 
 // Process computes NLL loss.
@@ -170,8 +203,11 @@ func (n *NLLLoss) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (n *NLLLoss) Name() pipz.Name { return "nll_loss" }
+// Identity returns the operator identity.
+func (n *NLLLoss) Identity() pipz.Identity { return n.identity }
+
+// Schema returns the operator schema.
+func (n *NLLLoss) Schema() pipz.Node { return pipz.Node{Identity: n.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (n *NLLLoss) Close() error { return nil }

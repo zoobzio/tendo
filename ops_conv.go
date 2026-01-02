@@ -35,18 +35,20 @@ var (
 // Input shape: [N, C_in, H, W]
 // Weight shape: [C_out, C_in/groups, kH, kW]
 // Output shape: [N, C_out, H_out, W_out].
-type Conv2d struct {
-	backend ConvOps
-	weight  *Tensor
-	config  Conv2dConfig
+type Conv2d struct { //nolint:govet // field alignment is less important than readability
+	backend  ConvOps
+	weight   *Tensor
+	config   Conv2dConfig
+	identity pipz.Identity
 }
 
 // NewConv2d creates a Conv2d operator.
 func NewConv2d(backend ConvOps, weight *Tensor, config Conv2dConfig) *Conv2d {
 	return &Conv2d{
-		backend: backend,
-		weight:  weight,
-		config:  config,
+		identity: IdentityConv2d,
+		backend:  backend,
+		weight:   weight,
+		config:   config,
 	}
 }
 
@@ -59,8 +61,9 @@ func NewConv2dSimple(backend ConvOps, weight *Tensor, stride int) *Conv2d {
 	padW := (kW - 1) / 2
 
 	return &Conv2d{
-		backend: backend,
-		weight:  weight,
+		identity: IdentityConv2d,
+		backend:  backend,
+		weight:   weight,
 		config: Conv2dConfig{
 			Padding:  [2]int{padH, padW},
 			Stride:   [2]int{stride, stride},
@@ -93,8 +96,11 @@ func (c *Conv2d) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (c *Conv2d) Name() pipz.Name { return "conv2d" }
+// Identity returns the operator identity.
+func (c *Conv2d) Identity() pipz.Identity { return c.identity }
+
+// Schema returns the operator schema.
+func (c *Conv2d) Schema() pipz.Node { return pipz.Node{Identity: c.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (c *Conv2d) Close() error { return nil }
@@ -141,18 +147,20 @@ func DefaultConvTranspose2dConfig() ConvTranspose2dConfig {
 // Input shape: [N, C_in, H, W]
 // Weight shape: [C_in, C_out/groups, kH, kW]
 // Output shape: [N, C_out, H_out, W_out].
-type ConvTranspose2d struct {
-	backend ConvOps
-	weight  *Tensor
-	config  ConvTranspose2dConfig
+type ConvTranspose2d struct { //nolint:govet // field alignment is less important than readability
+	backend  ConvOps
+	weight   *Tensor
+	config   ConvTranspose2dConfig
+	identity pipz.Identity
 }
 
 // NewConvTranspose2d creates a ConvTranspose2d operator.
 func NewConvTranspose2d(backend ConvOps, weight *Tensor, config ConvTranspose2dConfig) *ConvTranspose2d {
 	return &ConvTranspose2d{
-		backend: backend,
-		weight:  weight,
-		config:  config,
+		identity: IdentityConvTranspose2d,
+		backend:  backend,
+		weight:   weight,
+		config:   config,
 	}
 }
 
@@ -180,8 +188,11 @@ func (c *ConvTranspose2d) Process(ctx context.Context, input *Tensor) (*Tensor, 
 	return result, nil
 }
 
-// Name returns the operator name.
-func (c *ConvTranspose2d) Name() pipz.Name { return "convtranspose2d" }
+// Identity returns the operator identity.
+func (c *ConvTranspose2d) Identity() pipz.Identity { return c.identity }
+
+// Schema returns the operator schema.
+func (c *ConvTranspose2d) Schema() pipz.Node { return pipz.Node{Identity: c.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (c *ConvTranspose2d) Close() error { return nil }

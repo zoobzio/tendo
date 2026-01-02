@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/zoobzio/pipz"
 )
 
 func newTestTensor() *Tensor {
@@ -24,7 +26,7 @@ func TestSequence(t *testing.T) {
 	tensor := newTestTensor()
 
 	seq := Sequence("pipeline",
-		Op("double", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+		Op(pipz.NewIdentity("double", "Double values"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 			data := mustCPUData(t)
 			doubled := make([]float32, len(data))
 			for i, v := range data {
@@ -32,7 +34,7 @@ func TestSequence(t *testing.T) {
 			}
 			return NewTensor(NewCPUStorageFromSlice(doubled, Float32), t.Shape(), nil), nil
 		}),
-		Op("add-one", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+		Op(pipz.NewIdentity("add-one", "Add one"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 			data := mustCPUData(t)
 			added := make([]float32, len(data))
 			for i, v := range data {
@@ -65,7 +67,7 @@ func TestFilter(t *testing.T) {
 			func(ctx context.Context, t *Tensor) bool {
 				return t.IsContiguous()
 			},
-			Op("process", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+			Op(pipz.NewIdentity("process", "Process tensor"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 				data := mustCPUData(t)
 				doubled := make([]float32, len(data))
 				for i, v := range data {
@@ -93,7 +95,7 @@ func TestFilter(t *testing.T) {
 			func(ctx context.Context, t *Tensor) bool {
 				return t.Numel() > 100
 			},
-			Op("process", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+			Op(pipz.NewIdentity("process", "Process tensor"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 				data := mustCPUData(t)
 				doubled := make([]float32, len(data))
 				for i, v := range data {
@@ -119,10 +121,10 @@ func TestFilter(t *testing.T) {
 func TestSwitch(t *testing.T) {
 	tensor := newTestTensor()
 
-	router := Switch("device-router", func(ctx context.Context, t *Tensor) DeviceType {
-		return t.Device().Type
+	router := Switch("device-router", func(ctx context.Context, t *Tensor) string {
+		return t.Device().Type.String()
 	})
-	router.AddRoute(CPU, Op("cpu-path", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+	router.AddRoute("cpu", Op(pipz.NewIdentity("cpu-path", "CPU path"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		data := mustCPUData(t)
 		doubled := make([]float32, len(data))
 		for i, v := range data {
@@ -146,10 +148,10 @@ func TestFallback(t *testing.T) {
 	tensor := newTestTensor()
 
 	fallback := Fallback("resilient",
-		Op("primary", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+		Op(pipz.NewIdentity("primary", "Primary processor"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 			return t, errors.New("primary failed")
 		}),
-		Op("backup", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+		Op(pipz.NewIdentity("backup", "Backup processor"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 			data := mustCPUData(t)
 			doubled := make([]float32, len(data))
 			for i, v := range data {
@@ -174,7 +176,7 @@ func TestTimeout(t *testing.T) {
 	t.Run("completes within timeout", func(t *testing.T) {
 		tensor := newTestTensor()
 
-		timeout := Timeout("bounded", Op("fast", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+		timeout := Timeout("bounded", Op(pipz.NewIdentity("fast", "Fast processor"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 			data := mustCPUData(t)
 			doubled := make([]float32, len(data))
 			for i, v := range data {
@@ -197,7 +199,7 @@ func TestTimeout(t *testing.T) {
 	t.Run("fails on timeout", func(t *testing.T) {
 		tensor := newTestTensor()
 
-		timeout := Timeout("bounded", Op("slow", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+		timeout := Timeout("bounded", Op(pipz.NewIdentity("slow", "Slow processor"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 			select {
 			case <-time.After(500 * time.Millisecond):
 				return t, nil

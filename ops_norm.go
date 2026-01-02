@@ -10,7 +10,7 @@ import (
 // BatchNorm2d is a chainable operator that applies batch normalization over 4D input.
 // Input shape: [N, C, H, W]
 // Normalizes over N, H, W dimensions per channel.
-type BatchNorm2d struct {
+type BatchNorm2d struct { //nolint:govet // field alignment is less important than readability
 	backend     NormOps
 	weight      *Tensor
 	bias        *Tensor
@@ -18,11 +18,13 @@ type BatchNorm2d struct {
 	runningVar  *Tensor
 	epsilon     float32
 	momentum    float32
+	identity    pipz.Identity
 }
 
 // NewBatchNorm2d creates a BatchNorm2d operator.
 func NewBatchNorm2d(backend NormOps, weight, bias, runningMean, runningVar *Tensor, epsilon, momentum float32) *BatchNorm2d {
 	return &BatchNorm2d{
+		identity:    IdentityBatchNorm2d,
 		backend:     backend,
 		weight:      weight,
 		bias:        bias,
@@ -57,8 +59,11 @@ func (b *BatchNorm2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (b *BatchNorm2d) Name() pipz.Name { return "batchnorm2d" }
+// Identity returns the operator identity.
+func (b *BatchNorm2d) Identity() pipz.Identity { return b.identity }
+
+// Schema returns the operator schema node.
+func (b *BatchNorm2d) Schema() pipz.Node { return pipz.Node{Identity: b.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (b *BatchNorm2d) Close() error { return nil }
@@ -68,6 +73,7 @@ var _ pipz.Chainable[*Tensor] = (*BatchNorm2d)(nil)
 // LayerNorm is a chainable operator that applies layer normalization.
 // Normalizes over the last len(normalizedShape) dimensions.
 type LayerNorm struct {
+	identity        pipz.Identity
 	backend         NormOps
 	weight          *Tensor
 	bias            *Tensor
@@ -78,6 +84,7 @@ type LayerNorm struct {
 // NewLayerNorm creates a LayerNorm operator.
 func NewLayerNorm(backend NormOps, normalizedShape []int, weight, bias *Tensor, epsilon float32) *LayerNorm {
 	return &LayerNorm{
+		identity:        IdentityLayerNorm,
 		backend:         backend,
 		normalizedShape: normalizedShape,
 		weight:          weight,
@@ -107,8 +114,11 @@ func (l *LayerNorm) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (l *LayerNorm) Name() pipz.Name { return "layernorm" }
+// Identity returns the operator identity.
+func (l *LayerNorm) Identity() pipz.Identity { return l.identity }
+
+// Schema returns the operator schema node.
+func (l *LayerNorm) Schema() pipz.Node { return pipz.Node{Identity: l.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (l *LayerNorm) Close() error { return nil }
@@ -118,6 +128,7 @@ var _ pipz.Chainable[*Tensor] = (*LayerNorm)(nil)
 // RMSNorm is a chainable operator that applies RMS (Root Mean Square) normalization.
 // Normalizes over the last len(normalizedShape) dimensions without mean subtraction.
 type RMSNorm struct {
+	identity        pipz.Identity
 	backend         NormOps
 	weight          *Tensor
 	normalizedShape []int
@@ -127,6 +138,7 @@ type RMSNorm struct {
 // NewRMSNorm creates an RMSNorm operator.
 func NewRMSNorm(backend NormOps, normalizedShape []int, weight *Tensor, epsilon float32) *RMSNorm {
 	return &RMSNorm{
+		identity:        IdentityRMSNorm,
 		backend:         backend,
 		normalizedShape: normalizedShape,
 		weight:          weight,
@@ -154,8 +166,11 @@ func (r *RMSNorm) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (r *RMSNorm) Name() pipz.Name { return "rmsnorm" }
+// Identity returns the operator identity.
+func (r *RMSNorm) Identity() pipz.Identity { return r.identity }
+
+// Schema returns the operator schema node.
+func (r *RMSNorm) Schema() pipz.Node { return pipz.Node{Identity: r.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (r *RMSNorm) Close() error { return nil }
@@ -165,17 +180,19 @@ var _ pipz.Chainable[*Tensor] = (*RMSNorm)(nil)
 // GroupNorm is a chainable operator that applies group normalization.
 // Divides channels into groups and normalizes within each group.
 // Input shape: [N, C, ...] where C must be divisible by numGroups.
-type GroupNorm struct {
+type GroupNorm struct { //nolint:govet // field alignment is less important than readability
 	backend   NormOps
 	weight    *Tensor
 	bias      *Tensor
 	numGroups int
 	epsilon   float32
+	identity  pipz.Identity
 }
 
 // NewGroupNorm creates a GroupNorm operator.
 func NewGroupNorm(backend NormOps, numGroups int, weight, bias *Tensor, epsilon float32) *GroupNorm {
 	return &GroupNorm{
+		identity:  IdentityGroupNorm,
 		backend:   backend,
 		numGroups: numGroups,
 		weight:    weight,
@@ -205,8 +222,11 @@ func (g *GroupNorm) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (g *GroupNorm) Name() pipz.Name { return "groupnorm" }
+// Identity returns the operator identity.
+func (g *GroupNorm) Identity() pipz.Identity { return g.identity }
+
+// Schema returns the operator schema node.
+func (g *GroupNorm) Schema() pipz.Node { return pipz.Node{Identity: g.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (g *GroupNorm) Close() error { return nil }
@@ -216,20 +236,22 @@ var _ pipz.Chainable[*Tensor] = (*GroupNorm)(nil)
 // InstanceNorm2d is a chainable operator that applies instance normalization over 4D input.
 // Input shape: [N, C, H, W]
 // Normalizes over H, W dimensions independently for each channel and sample.
-type InstanceNorm2d struct {
-	backend NormOps
-	weight  *Tensor
-	bias    *Tensor
-	epsilon float32
+type InstanceNorm2d struct { //nolint:govet // field alignment is less important than readability
+	backend  NormOps
+	weight   *Tensor
+	bias     *Tensor
+	epsilon  float32
+	identity pipz.Identity
 }
 
 // NewInstanceNorm2d creates an InstanceNorm2d operator.
 func NewInstanceNorm2d(backend NormOps, weight, bias *Tensor, epsilon float32) *InstanceNorm2d {
 	return &InstanceNorm2d{
-		backend: backend,
-		weight:  weight,
-		bias:    bias,
-		epsilon: epsilon,
+		identity: IdentityInstanceNorm2d,
+		backend:  backend,
+		weight:   weight,
+		bias:     bias,
+		epsilon:  epsilon,
 	}
 }
 
@@ -253,8 +275,11 @@ func (i *InstanceNorm2d) Process(ctx context.Context, t *Tensor) (*Tensor, error
 	return result, nil
 }
 
-// Name returns the operator name.
-func (i *InstanceNorm2d) Name() pipz.Name { return "instancenorm2d" }
+// Identity returns the operator identity.
+func (i *InstanceNorm2d) Identity() pipz.Identity { return i.identity }
+
+// Schema returns the operator schema node.
+func (i *InstanceNorm2d) Schema() pipz.Node { return pipz.Node{Identity: i.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (i *InstanceNorm2d) Close() error { return nil }

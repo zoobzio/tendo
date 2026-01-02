@@ -12,12 +12,16 @@ import (
 // A single dimension can be -1, which will be inferred.
 // Backend-agnostic: creates a view or copies if non-contiguous.
 type Reshape struct {
-	shape []int
+	identity pipz.Identity
+	shape    []int
 }
 
 // NewReshape creates a Reshape operator.
 func NewReshape(shape ...int) *Reshape {
-	return &Reshape{shape: shape}
+	return &Reshape{
+		identity: IdentityReshape,
+		shape:    shape,
+	}
 }
 
 // Process reshapes the tensor.
@@ -72,8 +76,11 @@ func (r *Reshape) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (r *Reshape) Name() pipz.Name { return "reshape" }
+// Identity returns the operator identity.
+func (r *Reshape) Identity() pipz.Identity { return r.identity }
+
+// Schema returns the operator schema.
+func (r *Reshape) Schema() pipz.Node { return pipz.Node{Identity: r.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (r *Reshape) Close() error { return nil }
@@ -84,12 +91,16 @@ var _ pipz.Chainable[*Tensor] = (*Reshape)(nil)
 // The tensor must be contiguous. Use Reshape for non-contiguous tensors.
 // Backend-agnostic.
 type View struct {
-	shape []int
+	identity pipz.Identity
+	shape    []int
 }
 
 // NewView creates a View operator.
 func NewView(shape ...int) *View {
-	return &View{shape: shape}
+	return &View{
+		identity: IdentityView,
+		shape:    shape,
+	}
 }
 
 // Process creates a view of the tensor.
@@ -134,8 +145,11 @@ func (v *View) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (v *View) Name() pipz.Name { return "view" }
+// Identity returns the operator identity.
+func (v *View) Identity() pipz.Identity { return v.identity }
+
+// Schema returns the operator schema.
+func (v *View) Schema() pipz.Node { return pipz.Node{Identity: v.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (v *View) Close() error { return nil }
@@ -146,17 +160,24 @@ var _ pipz.Chainable[*Tensor] = (*View)(nil)
 // If dim is specified, only that dimension is squeezed (if size 1).
 // Backend-agnostic.
 type Squeeze struct {
-	dim *int // nil means squeeze all dimensions of size 1
+	dim      *int // nil means squeeze all dimensions of size 1
+	identity pipz.Identity
 }
 
 // NewSqueeze creates a Squeeze operator that squeezes all size-1 dimensions.
 func NewSqueeze() *Squeeze {
-	return &Squeeze{dim: nil}
+	return &Squeeze{
+		identity: IdentitySqueeze,
+		dim:      nil,
+	}
 }
 
 // NewSqueezeDim creates a Squeeze operator that squeezes a specific dimension.
 func NewSqueezeDim(dim int) *Squeeze {
-	return &Squeeze{dim: &dim}
+	return &Squeeze{
+		identity: IdentitySqueeze,
+		dim:      &dim,
+	}
 }
 
 // Process squeezes the tensor.
@@ -217,8 +238,11 @@ func (s *Squeeze) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (s *Squeeze) Name() pipz.Name { return "squeeze" }
+// Identity returns the operator identity.
+func (s *Squeeze) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Squeeze) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Squeeze) Close() error { return nil }
@@ -228,12 +252,16 @@ var _ pipz.Chainable[*Tensor] = (*Squeeze)(nil)
 // Unsqueeze is a chainable operator that inserts a dimension of size 1.
 // Backend-agnostic.
 type Unsqueeze struct {
-	dim int
+	identity pipz.Identity
+	dim      int
 }
 
 // NewUnsqueeze creates an Unsqueeze operator.
 func NewUnsqueeze(dim int) *Unsqueeze {
-	return &Unsqueeze{dim: dim}
+	return &Unsqueeze{
+		identity: IdentityUnsqueeze,
+		dim:      dim,
+	}
 }
 
 // Process unsqueezes the tensor.
@@ -290,8 +318,11 @@ func (u *Unsqueeze) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (u *Unsqueeze) Name() pipz.Name { return "unsqueeze" }
+// Identity returns the operator identity.
+func (u *Unsqueeze) Identity() pipz.Identity { return u.identity }
+
+// Schema returns the operator schema.
+func (u *Unsqueeze) Schema() pipz.Node { return pipz.Node{Identity: u.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (u *Unsqueeze) Close() error { return nil }
@@ -301,13 +332,18 @@ var _ pipz.Chainable[*Tensor] = (*Unsqueeze)(nil)
 // Flatten is a chainable operator that flattens dimensions from startDim to endDim.
 // Backend-agnostic.
 type Flatten struct {
+	identity pipz.Identity
 	startDim int
 	endDim   int
 }
 
 // NewFlatten creates a Flatten operator.
 func NewFlatten(startDim, endDim int) *Flatten {
-	return &Flatten{startDim: startDim, endDim: endDim}
+	return &Flatten{
+		identity: IdentityFlatten,
+		startDim: startDim,
+		endDim:   endDim,
+	}
 }
 
 // Process flattens the tensor.
@@ -368,8 +404,11 @@ func (f *Flatten) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (f *Flatten) Name() pipz.Name { return "flatten" }
+// Identity returns the operator identity.
+func (f *Flatten) Identity() pipz.Identity { return f.identity }
+
+// Schema returns the operator schema.
+func (f *Flatten) Schema() pipz.Node { return pipz.Node{Identity: f.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (f *Flatten) Close() error { return nil }
@@ -379,14 +418,20 @@ var _ pipz.Chainable[*Tensor] = (*Flatten)(nil)
 // Slice is a chainable operator that extracts a slice along a dimension.
 // start is inclusive, end is exclusive. Backend-agnostic.
 type Slice struct {
-	dim   int
-	start int
-	end   int
+	identity pipz.Identity
+	dim      int
+	start    int
+	end      int
 }
 
 // NewSlice creates a Slice operator.
 func NewSlice(dim, start, end int) *Slice {
-	return &Slice{dim: dim, start: start, end: end}
+	return &Slice{
+		identity: IdentitySlice,
+		dim:      dim,
+		start:    start,
+		end:      end,
+	}
 }
 
 // Process slices the tensor.
@@ -451,8 +496,11 @@ func (sl *Slice) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (sl *Slice) Name() pipz.Name { return "slice" }
+// Identity returns the operator identity.
+func (sl *Slice) Identity() pipz.Identity { return sl.identity }
+
+// Schema returns the operator schema.
+func (sl *Slice) Schema() pipz.Node { return pipz.Node{Identity: sl.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (sl *Slice) Close() error { return nil }
@@ -461,14 +509,20 @@ var _ pipz.Chainable[*Tensor] = (*Slice)(nil)
 
 // Narrow is an alias for Slice. Backend-agnostic.
 type Narrow struct {
-	dim    int
-	start  int
-	length int
+	identity pipz.Identity
+	dim      int
+	start    int
+	length   int
 }
 
 // NewNarrow creates a Narrow operator.
 func NewNarrow(dim, start, length int) *Narrow {
-	return &Narrow{dim: dim, start: start, length: length}
+	return &Narrow{
+		identity: IdentityNarrow,
+		dim:      dim,
+		start:    start,
+		length:   length,
+	}
 }
 
 // Process narrows the tensor.
@@ -477,8 +531,11 @@ func (n *Narrow) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return slice.Process(ctx, t)
 }
 
-// Name returns the operator name.
-func (n *Narrow) Name() pipz.Name { return "narrow" }
+// Identity returns the operator identity.
+func (n *Narrow) Identity() pipz.Identity { return n.identity }
+
+// Schema returns the operator schema.
+func (n *Narrow) Schema() pipz.Node { return pipz.Node{Identity: n.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (n *Narrow) Close() error { return nil }
@@ -489,12 +546,16 @@ var _ pipz.Chainable[*Tensor] = (*Narrow)(nil)
 // The tensor is not copied; stride is set to 0 for expanded dimensions.
 // Backend-agnostic.
 type Expand struct {
-	shape []int
+	identity pipz.Identity
+	shape    []int
 }
 
 // NewExpand creates an Expand operator.
 func NewExpand(shape ...int) *Expand {
-	return &Expand{shape: shape}
+	return &Expand{
+		identity: IdentityExpand,
+		shape:    shape,
+	}
 }
 
 // Process expands the tensor.
@@ -561,8 +622,11 @@ func (e *Expand) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (e *Expand) Name() pipz.Name { return "expand" }
+// Identity returns the operator identity.
+func (e *Expand) Identity() pipz.Identity { return e.identity }
+
+// Schema returns the operator schema.
+func (e *Expand) Schema() pipz.Node { return pipz.Node{Identity: e.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (e *Expand) Close() error { return nil }
@@ -572,12 +636,16 @@ var _ pipz.Chainable[*Tensor] = (*Expand)(nil)
 // Permute is a chainable operator that permutes dimensions.
 // Backend-agnostic.
 type Permute struct {
-	dims []int
+	identity pipz.Identity
+	dims     []int
 }
 
 // NewPermute creates a Permute operator.
 func NewPermute(dims ...int) *Permute {
-	return &Permute{dims: dims}
+	return &Permute{
+		identity: IdentityPermute,
+		dims:     dims,
+	}
 }
 
 // Process permutes the tensor dimensions.
@@ -635,8 +703,11 @@ func (p *Permute) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (p *Permute) Name() pipz.Name { return "permute" }
+// Identity returns the operator identity.
+func (p *Permute) Identity() pipz.Identity { return p.identity }
+
+// Schema returns the operator schema.
+func (p *Permute) Schema() pipz.Node { return pipz.Node{Identity: p.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (p *Permute) Close() error { return nil }
@@ -646,15 +717,21 @@ var _ pipz.Chainable[*Tensor] = (*Permute)(nil)
 // Cat is a chainable operator that concatenates tensors along a dimension.
 // All tensors must have the same shape except in the concatenation dimension.
 type Cat struct {
-	backend ShapeOps
-	tensors []*Tensor
-	dim     int
+	identity pipz.Identity
+	backend  ShapeOps
+	tensors  []*Tensor
+	dim      int
 }
 
 // NewCat creates a Cat operator.
 // If backend is nil, uses CPU-only fallback implementation.
 func NewCat(backend ShapeOps, tensors []*Tensor, dim int) *Cat {
-	return &Cat{backend: backend, tensors: tensors, dim: dim}
+	return &Cat{
+		identity: IdentityCat,
+		backend:  backend,
+		tensors:  tensors,
+		dim:      dim,
+	}
 }
 
 // Process concatenates tensors.
@@ -761,8 +838,11 @@ func (c *Cat) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (c *Cat) Name() pipz.Name { return "cat" }
+// Identity returns the operator identity.
+func (c *Cat) Identity() pipz.Identity { return c.identity }
+
+// Schema returns the operator schema.
+func (c *Cat) Schema() pipz.Node { return pipz.Node{Identity: c.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (c *Cat) Close() error { return nil }
@@ -790,15 +870,21 @@ func copyTensorData(dst, src []float32, dstShape, srcShape []int, dstStrides []i
 // Stack is a chainable operator that stacks tensors along a new dimension.
 // All tensors must have identical shapes.
 type Stack struct {
-	backend ShapeOps
-	tensors []*Tensor
-	dim     int
+	identity pipz.Identity
+	backend  ShapeOps
+	tensors  []*Tensor
+	dim      int
 }
 
 // NewStack creates a Stack operator.
 // If backend is nil, uses CPU-only fallback implementation.
 func NewStack(backend ShapeOps, tensors []*Tensor, dim int) *Stack {
-	return &Stack{backend: backend, tensors: tensors, dim: dim}
+	return &Stack{
+		identity: IdentityStack,
+		backend:  backend,
+		tensors:  tensors,
+		dim:      dim,
+	}
 }
 
 // Process stacks tensors.
@@ -921,8 +1007,11 @@ func (s *Stack) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	return result, nil
 }
 
-// Name returns the operator name.
-func (s *Stack) Name() pipz.Name { return "stack" }
+// Identity returns the operator identity.
+func (s *Stack) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Stack) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
 
 // Close releases any resources held by this operator.
 func (s *Stack) Close() error { return nil }

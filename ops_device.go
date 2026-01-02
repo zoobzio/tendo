@@ -10,7 +10,7 @@ import (
 // To returns a Chainable that moves the tensor to the specified device.
 // If already on the target device, returns the tensor unchanged.
 func To(device Device) pipz.Chainable[*Tensor] {
-	return pipz.Apply("to", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+	return pipz.Apply(pipz.NewIdentity("to", "Device transfer"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		if t.Device() == device {
 			return t, nil
 		}
@@ -45,7 +45,7 @@ func ToGPU(index int) pipz.Chainable[*Tensor] {
 // MakeContiguous returns a Chainable that makes the tensor contiguous in memory.
 // If already contiguous, returns the tensor unchanged.
 func MakeContiguous() pipz.Chainable[*Tensor] {
-	return pipz.Transform("contiguous", func(_ context.Context, t *Tensor) *Tensor {
+	return pipz.Transform(pipz.NewIdentity("contiguous", "Make contiguous"), func(_ context.Context, t *Tensor) *Tensor {
 		return t.Contiguous()
 	})
 }
@@ -142,7 +142,7 @@ func transferTo(t *Tensor, device Device) (*Tensor, error) {
 // Pin returns a Chainable that pins the tensor's memory for faster CPU-GPU transfer.
 // Only applicable to CPU tensors. No-op if already pinned or on GPU.
 func Pin() pipz.Chainable[*Tensor] {
-	return pipz.Transform("pin", func(_ context.Context, t *Tensor) *Tensor {
+	return pipz.Transform(pipz.NewIdentity("pin", "Pin memory"), func(_ context.Context, t *Tensor) *Tensor {
 		// TODO: Implement pinned memory when CUDA is available
 		// This would require cudaHostAlloc instead of regular malloc
 		return t
@@ -151,7 +151,7 @@ func Pin() pipz.Chainable[*Tensor] {
 
 // Unpin returns a Chainable that unpins the tensor's memory.
 func Unpin() pipz.Chainable[*Tensor] {
-	return pipz.Transform("unpin", func(_ context.Context, t *Tensor) *Tensor {
+	return pipz.Transform(pipz.NewIdentity("unpin", "Unpin memory"), func(_ context.Context, t *Tensor) *Tensor {
 		// TODO: Implement unpinning when CUDA is available
 		return t
 	})
@@ -161,7 +161,7 @@ func Unpin() pipz.Chainable[*Tensor] {
 // For CUDA tensors, this blocks until all pending operations complete.
 // For CPU tensors, this is a no-op.
 func Sync() pipz.Chainable[*Tensor] {
-	return pipz.Apply("sync", func(ctx context.Context, t *Tensor) (*Tensor, error) {
+	return pipz.Apply(pipz.NewIdentity("sync", "Device synchronization"), func(ctx context.Context, t *Tensor) (*Tensor, error) {
 		if syncer, ok := t.storage.(Syncer); ok {
 			if err := syncer.Sync(); err != nil {
 				return nil, fmt.Errorf("sync: %w", err)
