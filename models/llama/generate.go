@@ -10,11 +10,11 @@ import (
 
 // GenerateConfig configures text generation.
 type GenerateConfig struct {
-	MaxTokens   int     // maximum tokens to generate
-	Temperature float32 // sampling temperature
-	TopK        int     // top-k sampling (0 = disabled)
-	TopP        float32 // nucleus sampling (0 = disabled)
-	StopTokens  []int   // tokens that end generation
+	StopTokens  []int
+	MaxTokens   int
+	TopK        int
+	Temperature float32
+	TopP        float32
 }
 
 // DefaultGenerateConfig returns sensible defaults.
@@ -36,6 +36,8 @@ type GenerateResult struct {
 
 // Generate produces tokens from a prompt.
 // Returns the generated token IDs (including the prompt).
+//
+//nolint:dupl // Intentional duplication with QuantizedModel.Generate - different types require separate implementations
 func (m *Model) Generate(ctx context.Context, promptIDs []int, cfg GenerateConfig, backend Backend) (*GenerateResult, error) {
 	samplingCfg := models.SamplingConfig{
 		MaxTokens:   cfg.MaxTokens,

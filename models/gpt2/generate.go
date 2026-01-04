@@ -11,11 +11,11 @@ import (
 
 // GenerateConfig configures text generation.
 type GenerateConfig struct {
-	MaxTokens   int     // maximum tokens to generate
-	Temperature float32 // sampling temperature
-	TopK        int     // top-k sampling (0 = disabled)
-	TopP        float32 // nucleus sampling (0 = disabled)
-	EOSToken    int     // end-of-sequence token (-1 = none)
+	MaxTokens   int
+	TopK        int
+	EOSToken    int
+	Temperature float32
+	TopP        float32
 }
 
 // DefaultGenerateConfig returns sensible defaults.

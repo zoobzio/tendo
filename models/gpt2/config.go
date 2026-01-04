@@ -1,3 +1,4 @@
+// Package gpt2 provides GPT-2 model implementation for inference.
 package gpt2
 
 // Config holds GPT-2 model configuration.

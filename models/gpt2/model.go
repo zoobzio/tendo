@@ -11,18 +11,12 @@ import (
 
 // Model represents a GPT-2 model.
 type Model struct {
-	Config Config
-
-	// Embeddings
-	TokenEmbed    *tendo.Tensor // [vocab_size, dim]
-	PositionEmbed *tendo.Tensor // [max_seq, dim]
-
-	// Transformer layers
-	Layers []*Layer
-
-	// Final layer norm
+	TokenEmbed      *tendo.Tensor
+	PositionEmbed   *tendo.Tensor
 	FinalNormWeight *tendo.Tensor
 	FinalNormBias   *tendo.Tensor
+	Layers          []*Layer
+	Config          Config
 }
 
 // Layer represents a single GPT-2 transformer layer.

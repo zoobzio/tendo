@@ -11,11 +11,11 @@ import (
 
 // SamplingConfig configures text generation sampling.
 type SamplingConfig struct {
-	MaxTokens   int     // maximum tokens to generate
-	Temperature float32 // sampling temperature (1.0 = normal, <1 = more deterministic)
-	TopK        int     // top-k sampling (0 = disabled)
-	TopP        float32 // nucleus sampling threshold (0 = disabled)
-	StopTokens  []int   // tokens that stop generation
+	StopTokens  []int
+	MaxTokens   int
+	TopK        int
+	Temperature float32
+	TopP        float32
 }
 
 // DefaultSamplingConfig returns sensible defaults.
@@ -31,15 +31,15 @@ func DefaultSamplingConfig() SamplingConfig {
 
 // Sampler handles token sampling from logits.
 type Sampler struct {
-	config SamplingConfig
 	rng    *rand.Rand
+	config SamplingConfig
 }
 
 // NewSampler creates a sampler with the given config.
 func NewSampler(cfg SamplingConfig) *Sampler {
 	return &Sampler{
 		config: cfg,
-		rng:    rand.New(rand.NewSource(rand.Int63())),
+		rng:    rand.New(rand.NewSource(rand.Int63())), //nolint:gosec // ML sampling does not require crypto-secure randomness
 	}
 }
 
@@ -164,13 +164,13 @@ func softmax(logits []float32) []float32 {
 func findKthLargest(values []float32, k int) float32 {
 	// Simple O(n*k) implementation - fine for vocab sizes
 	if k >= len(values) {
-		min := values[0]
+		minVal := values[0]
 		for _, v := range values[1:] {
-			if v < min {
-				min = v
+			if v < minVal {
+				minVal = v
 			}
 		}
-		return min
+		return minVal
 	}
 
 	// Make a copy and partially sort

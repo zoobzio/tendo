@@ -1,3 +1,4 @@
+// Package main provides an example inference CLI for Llama models.
 package main
 
 import (
@@ -12,6 +13,11 @@ import (
 	"github.com/zoobzio/tendo/cuda"
 	"github.com/zoobzio/tendo/models"
 	"github.com/zoobzio/tendo/models/llama"
+)
+
+const (
+	deviceCUDA = "cuda"
+	deviceCPU  = "cpu"
 )
 
 func main() {
@@ -36,54 +42,69 @@ func main() {
 		log.Fatalf("Invalid config: %v", err)
 	}
 
-	// Load tokenizer
-	fmt.Println("Loading tokenizer...")
-	tokenizer, err := models.LoadTokenizer(*tokenizerPath)
-	if err != nil {
-		log.Fatalf("Failed to load tokenizer: %v", err)
-	}
-	defer tokenizer.Close()
-
-	// Load model
-	fmt.Printf("Loading model (%s on %s)...\n", *configName, *device)
-	var model *llama.Model
-
-	switch strings.ToLower(*device) {
-	case "cuda":
+	// Validate device early (before allocating resources)
+	deviceLower := strings.ToLower(*device)
+	switch deviceLower {
+	case deviceCUDA:
 		if !cuda.IsCUDAAvailable() {
 			log.Fatal("CUDA not available")
 		}
-		backend := cuda.NewBackend()
-		model, err = llama.LoadOn(*modelPath, cfg, backend)
-	case "cpu":
-		// For CPU, load to CPU then use CPU backend
-		model, err = llama.Load(*modelPath, cfg)
+	case deviceCPU:
+		// CPU always available
 	default:
 		log.Fatalf("Unknown device: %s (use 'cuda' or 'cpu')", *device)
 	}
 
+	// Run inference (deferred cleanup happens correctly within this function)
+	if err := runInference(*modelPath, *tokenizerPath, *configName, deviceLower, cfg, *prompt, *maxTokens, *temperature); err != nil {
+		log.Fatalf("Inference failed: %v", err)
+	}
+}
+
+func runInference(modelPath, tokenizerPath, configName, deviceLower string, cfg llama.Config, prompt string, maxTokens int, temperature float64) error {
+	// Load tokenizer
+	fmt.Println("Loading tokenizer...")
+	tokenizer, err := models.LoadTokenizer(tokenizerPath)
 	if err != nil {
-		log.Fatalf("Failed to load model: %v", err)
+		return fmt.Errorf("load tokenizer: %w", err)
+	}
+	defer func() { _ = tokenizer.Close() }() //nolint:errcheck // best-effort cleanup
+
+	// Load model
+	fmt.Printf("Loading model (%s on %s)...\n", configName, deviceLower)
+	var model *llama.Model
+
+	switch deviceLower {
+	case deviceCUDA:
+		backend := cuda.NewBackend()
+		model, err = llama.LoadOn(modelPath, cfg, backend)
+	case deviceCPU:
+		// For CPU, load to CPU then use CPU backend
+		model, err = llama.Load(modelPath, cfg)
+	}
+
+	if err != nil {
+		return fmt.Errorf("load model: %w", err)
 	}
 
 	fmt.Println("Model loaded.")
 
 	// Encode prompt
-	promptIDs := tokenizer.Encode(*prompt, false)
-	fmt.Printf("Prompt: %q (%d tokens)\n", *prompt, len(promptIDs))
+	promptIDs := tokenizer.Encode(prompt, false)
+	fmt.Printf("Prompt: %q (%d tokens)\n", prompt, len(promptIDs))
 
 	// Set up generation config
 	genCfg := llama.GenerateConfig{
-		MaxTokens:   *maxTokens,
-		Temperature: float32(*temperature),
+		MaxTokens:   maxTokens,
+		Temperature: float32(temperature),
 	}
 
 	// Create backend for inference
 	var backend llama.Backend
-	switch strings.ToLower(*device) {
-	case "cuda":
+	switch deviceLower {
+	case deviceCUDA:
 		backend = cuda.NewBackend()
-	case "cpu":
+	case deviceCPU:
 		backend = cpu.NewBackend()
 	}
 
@@ -92,12 +113,14 @@ func main() {
 	ctx := context.Background()
 	result, err := model.Generate(ctx, promptIDs, genCfg, backend)
 	if err != nil {
-		log.Fatalf("Generation failed: %v", err)
+		return fmt.Errorf("generate: %w", err)
 	}
 
 	// Decode output
 	output := tokenizer.Decode(result.TokenIDs, true)
 	fmt.Printf("\n--- Output (%d tokens generated) ---\n%s\n", result.NumTokens, output)
+
+	return nil
 }
 
 func getConfig(name string) (llama.Config, error) {

@@ -10,6 +10,7 @@ import (
 // NormType represents the normalization type.
 type NormType int
 
+// Supported normalization types.
 const (
 	RMSNorm NormType = iota
 	LayerNorm
@@ -24,7 +25,7 @@ type TransformerBackend interface {
 }
 
 // TransformerLayer represents a single transformer block.
-// Architecture: x -> norm -> attention -> residual -> norm -> mlp -> residual
+// Architecture: x -> norm -> attention -> residual -> norm -> mlp -> residual.
 type TransformerLayer struct {
 	Attention *Attention
 	MLP       *MLP
@@ -41,14 +42,14 @@ type TransformerLayer struct {
 
 // TransformerConfig configures a transformer layer.
 type TransformerConfig struct {
-	Dim        int        // model dimension
-	NumHeads   int        // attention heads
-	HiddenDim  int        // MLP hidden dimension
-	NormType   NormType   // normalization type
-	Activation Activation // MLP activation
-	GatedMLP   bool       // use gated MLP (SwiGLU)
-	Epsilon    float32    // normalization epsilon
-	Bias       bool       // use bias in projections
+	Dim        int
+	NumHeads   int
+	HiddenDim  int
+	NormType   NormType
+	Activation Activation
+	Epsilon    float32
+	GatedMLP   bool
+	Bias       bool
 }
 
 // TransformerLayerOutput contains the layer output and optional KV cache.
@@ -59,7 +60,7 @@ type TransformerLayerOutput struct {
 
 // Forward computes the transformer layer output.
 // Input shape: [batch, seq, dim]
-// Output shape: [batch, seq, dim]
+// Output shape: [batch, seq, dim].
 func (l *TransformerLayer) Forward(ctx context.Context, x *tendo.Tensor, cache *KVCache, causal bool, backend TransformerBackend) (*TransformerLayerOutput, error) {
 	// Pre-attention normalization
 	normed, err := l.applyNorm(ctx, x, l.AttnNormWeight, l.AttnNormBias, backend)
@@ -118,14 +119,12 @@ func (l *TransformerLayer) applyNorm(ctx context.Context, x *tendo.Tensor, weigh
 
 // Transformer represents a stack of transformer layers.
 type Transformer struct {
-	Layers []*TransformerLayer
-
-	// Final normalization (applied after all layers)
 	FinalNormWeight *tendo.Tensor
 	FinalNormBias   *tendo.Tensor
+	Layers          []*TransformerLayer
 	NormType        NormType
-	Epsilon         float32
 	Dim             int
+	Epsilon         float32
 }
 
 // TransformerOutput contains the model output and KV caches for all layers.
@@ -136,7 +135,7 @@ type TransformerOutput struct {
 
 // Forward computes the transformer output through all layers.
 // Input shape: [batch, seq, dim]
-// Output shape: [batch, seq, dim]
+// Output shape: [batch, seq, dim].
 func (t *Transformer) Forward(ctx context.Context, x *tendo.Tensor, caches []*KVCache, causal bool, backend TransformerBackend) (*TransformerOutput, error) {
 	h := x
 	newCaches := make([]*KVCache, len(t.Layers))

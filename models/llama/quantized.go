@@ -12,20 +12,12 @@ import (
 
 // QuantizedModel is a Llama model with quantized linear layers.
 type QuantizedModel struct {
-	Config Config
-	RoPE   *nn.RoPE
-
-	// Embeddings (kept in fp32 - small relative to total)
-	TokenEmbed *tendo.Tensor
-
-	// Quantized transformer layers
-	Layers []*QuantizedLayer
-
-	// Final normalization (kept in fp32)
+	RoPE            *nn.RoPE
+	TokenEmbed      *tendo.Tensor
 	FinalNormWeight *tendo.Tensor
-
-	// Output head (kept in fp32 - used once per forward)
-	OutputWeight *tendo.Tensor
+	OutputWeight    *tendo.Tensor
+	Layers          []*QuantizedLayer
+	Config          Config
 }
 
 // QuantizedLayer is a transformer layer with quantized projections.
@@ -58,7 +50,7 @@ type QuantizedBackend interface {
 }
 
 // QuantizeModel converts a regular model to quantized form.
-// groupSize: 0 for per-channel, or group size (e.g., 128) for per-group
+// groupSize: 0 for per-channel, or group size (e.g., 128) for per-group.
 func QuantizeModel(m *Model, groupSize int) (*QuantizedModel, error) {
 	layers := make([]*QuantizedLayer, len(m.Layers))
 
@@ -128,10 +120,12 @@ func quantizeLayer(layer *Layer, groupSize int) (*QuantizedLayer, error) {
 }
 
 // Forward runs the quantized model.
+//
+//nolint:dupl // Intentional duplication with Model.Forward - different types require separate implementations
 func (m *QuantizedModel) Forward(ctx context.Context, tokenIDs *tendo.Tensor, caches []*KVCache, backend QuantizedBackend) (*Output, error) {
 	// Determine position offset from cache
 	posOffset := 0
-	if caches != nil && len(caches) > 0 && caches[0] != nil {
+	if len(caches) > 0 && caches[0] != nil {
 		posOffset = caches[0].K.Size(2)
 	}
 
@@ -286,7 +280,8 @@ func (m *QuantizedModel) forwardQuantizedAttention(ctx context.Context, x *tendo
 
 	// Handle KV cache
 	if cache != nil {
-		kCached, err := backend.Cat(ctx, []*tendo.Tensor{cache.K, kRoped}, 2)
+		var kCached, vCached *tendo.Tensor
+		kCached, err = backend.Cat(ctx, []*tendo.Tensor{cache.K, kRoped}, 2)
 		kRoped.Free()
 		if err != nil {
 			vProj.Free()
@@ -294,7 +289,7 @@ func (m *QuantizedModel) forwardQuantizedAttention(ctx context.Context, x *tendo
 		}
 		kRoped = kCached
 
-		vCached, err := backend.Cat(ctx, []*tendo.Tensor{cache.V, v}, 2)
+		vCached, err = backend.Cat(ctx, []*tendo.Tensor{cache.V, v}, 2)
 		vProj.Free()
 		if err != nil {
 			kRoped.Free()
@@ -386,6 +381,7 @@ func (m *QuantizedModel) forwardQuantizedAttention(ctx context.Context, x *tendo
 	return out, newCache, nil
 }
 
+//nolint:dupl // Intentional duplication with Model.forwardMLP - different types require separate implementations
 func (m *QuantizedModel) forwardQuantizedMLP(ctx context.Context, x *tendo.Tensor, layer *QuantizedLayer, backend QuantizedBackend) (*tendo.Tensor, error) {
 	// Quantized SwiGLU
 	gateProj, err := layer.GateProj.Forward(ctx, x, backend)
@@ -421,6 +417,8 @@ func (m *QuantizedModel) forwardQuantizedMLP(ctx context.Context, x *tendo.Tenso
 }
 
 // Generate produces tokens using the quantized model.
+//
+//nolint:dupl // Intentional duplication with Model.Generate - different types require separate implementations
 func (m *QuantizedModel) Generate(ctx context.Context, promptIDs []int, cfg GenerateConfig, backend QuantizedBackend) (*GenerateResult, error) {
 	samplingCfg := models.SamplingConfig{
 		MaxTokens:   cfg.MaxTokens,

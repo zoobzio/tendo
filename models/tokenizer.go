@@ -34,7 +34,7 @@ func (t *Tokenizer) Encode(text string, addSpecialTokens bool) []int {
 func (t *Tokenizer) Decode(ids []int, skipSpecialTokens bool) string {
 	uids := make([]uint32, len(ids))
 	for i, id := range ids {
-		uids[i] = uint32(id)
+		uids[i] = uint32(id) //nolint:gosec // token IDs are always non-negative
 	}
 	return t.tk.Decode(uids, skipSpecialTokens)
 }
@@ -46,6 +46,5 @@ func (t *Tokenizer) VocabSize() int {
 
 // Close releases the tokenizer resources.
 func (t *Tokenizer) Close() error {
-	t.tk.Close()
-	return nil
+	return t.tk.Close()
 }

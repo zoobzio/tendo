@@ -9,30 +9,6 @@ import (
 	"github.com/zoobzio/tendo/nn"
 )
 
-// tensorCleanup tracks tensors that own storage and need to be freed.
-// Views (from Reshape, Permute, etc.) should NOT be added here.
-type tensorCleanup struct {
-	tensors []*tendo.Tensor
-}
-
-// track adds a tensor to be freed later. Returns the tensor for chaining.
-func (c *tensorCleanup) track(t *tendo.Tensor) *tendo.Tensor {
-	if t != nil {
-		c.tensors = append(c.tensors, t)
-	}
-	return t
-}
-
-// free releases all tracked tensors.
-func (c *tensorCleanup) free() {
-	for _, t := range c.tensors {
-		if t != nil {
-			t.Free()
-		}
-	}
-	c.tensors = nil
-}
-
 // Backend defines operations needed for Llama inference.
 type Backend interface {
 	nn.LinearBackend
@@ -63,10 +39,12 @@ type Output struct {
 }
 
 // Forward runs the model on input token IDs.
+//
+//nolint:dupl // Intentional duplication with QuantizedModel.Forward - different types require separate implementations
 func (m *Model) Forward(ctx context.Context, tokenIDs *tendo.Tensor, caches []*KVCache, backend Backend) (*Output, error) {
 	// Determine position offset from cache
 	posOffset := 0
-	if caches != nil && len(caches) > 0 && caches[0] != nil {
+	if len(caches) > 0 && caches[0] != nil {
 		posOffset = caches[0].K.Size(2)
 	}
 
@@ -224,7 +202,8 @@ func (m *Model) forwardAttention(ctx context.Context, x *tendo.Tensor, layer *La
 
 	// Handle KV cache
 	if cache != nil {
-		kCached, err := backend.Cat(ctx, []*tendo.Tensor{cache.K, kRoped}, 2)
+		var kCached, vCached *tendo.Tensor
+		kCached, err = backend.Cat(ctx, []*tendo.Tensor{cache.K, kRoped}, 2)
 		kRoped.Free() // Free pre-concat K
 		if err != nil {
 			vProj.Free()
@@ -232,7 +211,7 @@ func (m *Model) forwardAttention(ctx context.Context, x *tendo.Tensor, layer *La
 		}
 		kRoped = kCached
 
-		vCached, err := backend.Cat(ctx, []*tendo.Tensor{cache.V, v}, 2)
+		vCached, err = backend.Cat(ctx, []*tendo.Tensor{cache.V, v}, 2)
 		vProj.Free() // Free V projection storage
 		if err != nil {
 			kRoped.Free()
@@ -325,8 +304,9 @@ func (m *Model) forwardAttention(ctx context.Context, x *tendo.Tensor, layer *La
 	return out, newCache, nil
 }
 
+//nolint:dupl // Intentional duplication with QuantizedModel - different types require separate implementations
 func (m *Model) forwardMLP(ctx context.Context, x *tendo.Tensor, layer *Layer, backend Backend) (*tendo.Tensor, error) {
-	// SwiGLU: down(silu(gate(x)) * up(x))
+	// SwiGLU MLP: output = DownProj(SiLU(GateProj(x)) * UpProj(x))
 	gateProj, err := layer.GateProj.Forward(ctx, x, backend)
 	if err != nil {
 		return nil, fmt.Errorf("gate projection: %w", err)
@@ -361,7 +341,7 @@ func (m *Model) forwardMLP(ctx context.Context, x *tendo.Tensor, layer *Layer, b
 
 // repeatKVHeads repeats K/V heads for GQA.
 // Input: [batch, num_kv_heads, seq, head_dim]
-// Output: [batch, num_heads, seq, head_dim] where num_heads = num_kv_heads * repeatFactor
+// Output: [batch, num_heads, seq, head_dim] where num_heads = num_kv_heads * repeatFactor.
 func repeatKVHeads(ctx context.Context, x *tendo.Tensor, repeatFactor int) (*tendo.Tensor, error) {
 	if repeatFactor == 1 {
 		return x, nil

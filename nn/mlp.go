@@ -10,6 +10,7 @@ import (
 // Activation represents an activation function type.
 type Activation int
 
+// Supported activation functions.
 const (
 	GELU Activation = iota
 	SiLU
@@ -27,7 +28,7 @@ type MLPBackend interface {
 
 // MLP represents a feed-forward network.
 // Standard: up -> activation -> down
-// Gated (SwiGLU style): (gate * up) -> down
+// Gated (SwiGLU style): (gate * up) -> down.
 type MLP struct {
 	UpProj   *Linear // [dim, hidden_dim]
 	DownProj *Linear // [hidden_dim, dim]
@@ -48,7 +49,7 @@ type MLPConfig struct {
 
 // NewMLP creates an MLP from weight tensors.
 // For standard MLP: upWeight [hidden_dim, dim], downWeight [dim, hidden_dim]
-// For gated MLP: additionally gateWeight [hidden_dim, dim]
+// For gated MLP: additionally gateWeight [hidden_dim, dim].
 func NewMLP(cfg MLPConfig, upWeight, downWeight, gateWeight *tendo.Tensor, upBias, downBias, gateBias *tendo.Tensor) (*MLP, error) {
 	upProj, err := NewLinear(upWeight, upBias)
 	if err != nil {
@@ -82,7 +83,7 @@ func NewMLP(cfg MLPConfig, upWeight, downWeight, gateWeight *tendo.Tensor, upBia
 
 // Forward computes the MLP output.
 // Standard: down(activation(up(x)))
-// Gated: down(activation(gate(x)) * up(x))
+// Gated: down(activation(gate(x)) * up(x)).
 func (m *MLP) Forward(ctx context.Context, x *tendo.Tensor, backend MLPBackend) (*tendo.Tensor, error) {
 	if m.Gated {
 		return m.forwardGated(ctx, x, backend)

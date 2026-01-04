@@ -13,7 +13,7 @@ type LinearBackend interface {
 	Add(ctx context.Context, a, b *tendo.Tensor) (*tendo.Tensor, error)
 }
 
-// Linear represents a fully connected layer: y = xW^T + b
+// Linear represents a fully connected layer: y = xW^T + b.
 type Linear struct {
 	Weight *tendo.Tensor // [out_features, in_features]
 	Bias   *tendo.Tensor // [out_features], optional
@@ -21,7 +21,7 @@ type Linear struct {
 
 // NewLinear creates a Linear layer from weight and optional bias tensors.
 // Weight shape: [out_features, in_features]
-// Bias shape: [out_features] or nil
+// Bias shape: [out_features] or nil.
 func NewLinear(weight, bias *tendo.Tensor) (*Linear, error) {
 	if weight == nil {
 		return nil, fmt.Errorf("nn.Linear: weight cannot be nil")
@@ -52,7 +52,7 @@ func (l *Linear) OutFeatures() int {
 
 // Forward computes y = xW^T + b
 // Input shape: [..., in_features]
-// Output shape: [..., out_features]
+// Output shape: [..., out_features].
 func (l *Linear) Forward(ctx context.Context, x *tendo.Tensor, backend LinearBackend) (*tendo.Tensor, error) {
 	// x: [..., in_features]
 	// weight: [out_features, in_features]

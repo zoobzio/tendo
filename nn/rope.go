@@ -11,13 +11,11 @@ import (
 // RoPE implements Rotary Position Embeddings.
 // It precomputes sin/cos frequencies for efficient application.
 type RoPE struct {
+	CosCache  *tendo.Tensor
+	SinCache  *tendo.Tensor
 	Dim       int
 	MaxSeqLen int
 	Base      float32
-
-	// Precomputed frequencies: [max_seq, dim/2]
-	CosCache *tendo.Tensor
-	SinCache *tendo.Tensor
 }
 
 // NewRoPE creates a RoPE instance with precomputed frequencies.
@@ -139,7 +137,7 @@ func (r *RoPE) Apply(ctx context.Context, q, k *tendo.Tensor, posOffset int, bac
 // x shape: [batch, heads, seq, head_dim]
 // cos, sin shape: [seq, head_dim/2]
 // Formula: x_rot = [x0*cos - x1*sin, x0*sin + x1*cos]
-// where x0, x1 are the first and second halves of head_dim
+// where x0, x1 are the first and second halves of head_dim.
 func (r *RoPE) rotateHalf(ctx context.Context, x *tendo.Tensor, cos, sin *tendo.Tensor, backend RoPEBackend) (*tendo.Tensor, error) {
 	halfDim := r.Dim / 2
 

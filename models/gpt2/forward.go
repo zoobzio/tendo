@@ -16,20 +16,20 @@ type Backend interface {
 
 // Output contains the model output and KV caches.
 type Output struct {
-	Logits   *tendo.Tensor   // [batch, seq, vocab_size]
-	KVCaches []*nn.KVCache   // one per layer
+	Logits   *tendo.Tensor // [batch, seq, vocab_size]
+	KVCaches []*nn.KVCache // one per layer
 }
 
 // Forward runs the model on input token IDs.
 // Input: token IDs [batch, seq]
-// Output: logits [batch, seq, vocab_size]
+// Output: logits [batch, seq, vocab_size].
 func (m *Model) Forward(ctx context.Context, tokenIDs *tendo.Tensor, caches []*nn.KVCache, backend Backend) (*Output, error) {
 	batch := tokenIDs.Size(0)
 	seq := tokenIDs.Size(1)
 
 	// Determine position offset from cache
 	posOffset := 0
-	if caches != nil && len(caches) > 0 && caches[0] != nil {
+	if len(caches) > 0 && caches[0] != nil {
 		posOffset = caches[0].K.Size(2) // cached sequence length
 	}
 

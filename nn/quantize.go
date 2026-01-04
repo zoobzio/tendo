@@ -11,6 +11,7 @@ import (
 // QuantType represents the quantization bit width.
 type QuantType int
 
+// Supported quantization types.
 const (
 	QuantInt8 QuantType = 8
 	QuantInt4 QuantType = 4
@@ -37,7 +38,7 @@ type QuantizedTensor struct {
 
 // Quantize converts a float32 tensor to int8 with symmetric quantization.
 // weight shape: [out_features, in_features]
-// groupSize: 0 for per-channel, or group size (e.g., 128) for per-group
+// groupSize: 0 for per-channel, or group size (e.g., 128) for per-group.
 func Quantize(weight *tendo.Tensor, groupSize int) (*QuantizedTensor, error) {
 	shape := weight.Shape()
 	if len(shape) != 2 {
@@ -288,7 +289,7 @@ func NewQuantizedLinearFromTensors(data, scale *tendo.Tensor, shape []int, group
 	}
 }
 
-// Forward computes y = x @ dequantize(W).T + b
+// Forward computes y = x @ dequantize(W).T + b.
 func (l *QuantizedLinear) Forward(ctx context.Context, x *tendo.Tensor, backend QuantizedLinearBackend) (*tendo.Tensor, error) {
 	out, err := backend.DequantizeMatmul(ctx, x, l.Weight.Data, l.Weight.Scale, l.Weight.GroupSize)
 	if err != nil {

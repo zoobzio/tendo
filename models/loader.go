@@ -16,7 +16,7 @@ func Load(path string) (Weights, error) {
 	if err != nil {
 		return nil, fmt.Errorf("models: open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() //nolint:errcheck // best-effort cleanup
 
 	tensors := f.Tensors()
 	weights := make(Weights, len(tensors))
@@ -40,7 +40,7 @@ func LoadOn(path string, backend tendo.StorageBackend) (Weights, error) {
 	if err != nil {
 		return nil, fmt.Errorf("models: open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() //nolint:errcheck // best-effort cleanup
 
 	tensors := f.Tensors()
 	weights := make(Weights, len(tensors))

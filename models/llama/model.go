@@ -10,20 +10,12 @@ import (
 
 // Model represents a Llama-style model.
 type Model struct {
-	Config Config
-	RoPE   *nn.RoPE
-
-	// Embeddings
-	TokenEmbed *tendo.Tensor // [vocab_size, dim]
-
-	// Transformer layers
-	Layers []*Layer
-
-	// Final normalization
+	RoPE            *nn.RoPE
+	TokenEmbed      *tendo.Tensor
 	FinalNormWeight *tendo.Tensor
-
-	// Output head (may be tied to TokenEmbed)
-	OutputWeight *tendo.Tensor // [vocab_size, dim]
+	OutputWeight    *tendo.Tensor
+	Layers          []*Layer
+	Config          Config
 }
 
 // Layer represents a single Llama transformer layer.
