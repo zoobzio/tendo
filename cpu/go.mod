@@ -1,4 +1,4 @@
-module github.com/zoobzio/tendo/pkg/cpu
+module github.com/zoobzio/tendo/cpu
 
 go 1.25.0
 
@@ -13,4 +13,4 @@ require (
 	github.com/zoobzio/pipz v0.0.19 // indirect
 )
 
-replace github.com/zoobzio/tendo => ../../
+replace github.com/zoobzio/tendo => ../

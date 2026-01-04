@@ -109,6 +109,18 @@ func (b *Backend) FromSlice(data []float32, shape ...int) (*tendo.Tensor, error)
 	return tendo.NewTensor(storage, shape, nil), nil
 }
 
+func (b *Backend) FromInt64Slice(data []int64, shape ...int) (*tendo.Tensor, error) {
+	numel := tendo.Numel(shape)
+	if numel != len(data) {
+		return nil, tendo.ErrShapeMismatch
+	}
+	storage, err := NewInt64StorageFromSlice(data, b.deviceIndex)
+	if err != nil {
+		return nil, err
+	}
+	return tendo.NewTensor(storage, shape, nil), nil
+}
+
 func (b *Backend) Rand(shape ...int) (*tendo.Tensor, error) {
 	numel := tendo.Numel(shape)
 	data := make([]float32, numel)
@@ -210,7 +222,7 @@ func (b *Backend) Sqrt(_ context.Context, t *tendo.Tensor) (*tendo.Tensor, error
 }
 
 func (b *Backend) Square(_ context.Context, t *tendo.Tensor) (*tendo.Tensor, error) {
-	return OpTensor(t, t, cudnnOpTensorMul, 1.0, 1.0)
+	return PopcornSquare(t)
 }
 
 func (b *Backend) Sign(_ context.Context, t *tendo.Tensor) (*tendo.Tensor, error) {
@@ -428,72 +440,8 @@ func (b *Backend) LayerNorm(_ context.Context, input *tendo.Tensor, normalizedSh
 	return PopcornLayerNorm(input, weight, bias, normalizedShape, epsilon)
 }
 
-func (b *Backend) RMSNorm(ctx context.Context, input *tendo.Tensor, normalizedShape []int, weight *tendo.Tensor, epsilon float32) (*tendo.Tensor, error) {
-	// RMSNorm: x / sqrt(mean(x^2) + eps) * weight
-	// Composite implementation using existing ops
-
-	// Square the input
-	squared, err := b.Square(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-
-	// Calculate norm size for mean
-	normSize := 1
-	for _, d := range normalizedShape {
-		normSize *= d
-	}
-
-	// Mean over normalized dimensions (last dims)
-	ndim := len(input.Shape())
-	dims := make([]int, len(normalizedShape))
-	for i := range dims {
-		dims[i] = ndim - len(normalizedShape) + i
-	}
-
-	meanSq, err := b.Mean(ctx, squared, dims, true)
-	squared.Free()
-	if err != nil {
-		return nil, err
-	}
-
-	// Add epsilon - create scalar tensor and add
-	epsStorage, err := NewStorageFromSlice([]float32{epsilon}, tendo.Float32, 0)
-	if err != nil {
-		meanSq.Free()
-		return nil, err
-	}
-	epsTensor := tendo.NewTensor(epsStorage, []int{1}, nil)
-
-	meanSqEps, err := b.Add(ctx, meanSq, epsTensor)
-	meanSq.Free()
-	epsTensor.Free()
-	if err != nil {
-		return nil, err
-	}
-
-	// Sqrt
-	rms, err := b.Sqrt(ctx, meanSqEps)
-	meanSqEps.Free()
-	if err != nil {
-		return nil, err
-	}
-
-	// Divide input by rms
-	normalized, err := b.Div(ctx, input, rms)
-	rms.Free()
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply weight if provided
-	if weight != nil {
-		result, err := b.Mul(ctx, normalized, weight)
-		normalized.Free()
-		return result, err
-	}
-
-	return normalized, nil
+func (b *Backend) RMSNorm(_ context.Context, input *tendo.Tensor, normalizedShape []int, weight *tendo.Tensor, epsilon float32) (*tendo.Tensor, error) {
+	return PopcornRMSNorm(input, weight, normalizedShape, epsilon)
 }
 
 func (b *Backend) GroupNorm(_ context.Context, input *tendo.Tensor, numGroups int, weight, bias *tendo.Tensor, epsilon float32) (*tendo.Tensor, error) {
@@ -717,6 +665,59 @@ func (b *Backend) Cat(_ context.Context, tensors []*tendo.Tensor, dim int) (*ten
 
 func (b *Backend) Stack(_ context.Context, tensors []*tendo.Tensor, dim int) (*tendo.Tensor, error) {
 	return PopcornStack(tensors, dim)
+}
+
+// --- QuantizedOps ---
+
+// DequantizeMatmul performs fused dequantize + matmul for quantized linear layers.
+// Implements nn.QuantizedLinearBackend interface.
+// x: [batch*seq, in_features], qweight: [out_features, in_features], scale: depends on groupSize
+// Output: [batch*seq, out_features]
+func (b *Backend) DequantizeMatmul(_ context.Context, x *tendo.Tensor, qweight, scale *tendo.Tensor, groupSize int) (*tendo.Tensor, error) {
+	// Flatten x to 2D if needed: [batch, seq, in] -> [batch*seq, in]
+	xShape := x.Shape()
+	var x2d *tendo.Tensor
+	M := 1
+	for i := 0; i < len(xShape)-1; i++ {
+		M *= xShape[i]
+	}
+	K := xShape[len(xShape)-1]
+
+	if len(xShape) > 2 {
+		// Reshape to 2D
+		var err error
+		x2d, err = tendo.NewReshape(M, K).Process(context.Background(), x)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		x2d = x
+	}
+
+	// Call the appropriate kernel based on groupSize
+	var out *tendo.Tensor
+	var err error
+	if groupSize == 0 {
+		// Per-channel quantization
+		out, err = PopcornDequantizeMatmul(x2d, qweight, scale)
+	} else {
+		// Per-group quantization
+		out, err = PopcornDequantizeMatmulGrouped(x2d, qweight, scale, groupSize)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Reshape output back to match input batch dims
+	// out is [M, N], we want [batch, seq, N] if input was [batch, seq, in]
+	if len(xShape) > 2 {
+		outShape := make([]int, len(xShape))
+		copy(outShape, xShape[:len(xShape)-1])
+		outShape[len(outShape)-1] = out.Shape()[1] // N = out_features
+		return tendo.NewReshape(outShape...).Process(context.Background(), out)
+	}
+
+	return out, nil
 }
 
 // --- Helper functions ---

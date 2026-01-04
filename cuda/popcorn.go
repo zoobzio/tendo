@@ -20,9 +20,17 @@ func popcornError(status C.popcornStatus_t) error {
 	if status == C.POPCORN_SUCCESS {
 		return nil
 	}
+	msg := C.GoString(C.popcornGetErrorString(status))
+	if status == C.POPCORN_ERROR_CUDA {
+		// Get more detailed CUDA error string
+		cudaMsg := C.GoString(C.popcornGetLastCudaErrorString())
+		if cudaMsg != "" {
+			msg = msg + ": " + cudaMsg
+		}
+	}
 	return &CUDAError{
 		Code:    int(status),
-		Message: C.GoString(C.popcornGetErrorString(status)),
+		Message: msg,
 	}
 }
 
@@ -558,6 +566,54 @@ func PopcornLayerNorm(input, weight, bias *tendo.Tensor, normalizedShape []int, 
 		(*C.float)(unsafe.Pointer(inputStorage.Ptr())),
 		weightPtr,
 		biasPtr,
+		C.int64_t(n),
+		C.int64_t(normSize),
+		C.float(eps),
+		nil,
+	)
+	if err := popcornError(status); err != nil {
+		outStorage.Free()
+		return nil, err
+	}
+
+	return tendo.NewTensor(outStorage, input.Shape(), nil), nil
+}
+
+// PopcornRMSNorm applies RMS normalization.
+func PopcornRMSNorm(input, weight *tendo.Tensor, normalizedShape []int, eps float32) (*tendo.Tensor, error) {
+	inputStorage, ok := input.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: input.Device().Type}
+	}
+
+	// Calculate norm_size from normalizedShape
+	normSize := 1
+	for _, d := range normalizedShape {
+		normSize *= d
+	}
+
+	n := input.Numel() / normSize
+
+	outStorage, err := NewStorage(input.Numel(), input.DType(), inputStorage.device)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get weight pointer (nullable)
+	var weightPtr *C.float
+	if weight != nil {
+		weightStorage, ok := weight.Storage().(*Storage)
+		if !ok {
+			outStorage.Free()
+			return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: weight.Device().Type}
+		}
+		weightPtr = (*C.float)(unsafe.Pointer(weightStorage.Ptr()))
+	}
+
+	status := C.popcornRMSNorm_f32(
+		(*C.float)(unsafe.Pointer(outStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(inputStorage.Ptr())),
+		weightPtr,
 		C.int64_t(n),
 		C.int64_t(normSize),
 		C.float(eps),
@@ -2097,4 +2153,207 @@ func PopcornAdamW(
 		nil,
 	)
 	return popcornError(status)
+}
+
+// -----------------------------------------------------------------------------
+// Quantized MatMul Operations
+// -----------------------------------------------------------------------------
+
+// PopcornDequantizeMatmul performs fused dequantize + matmul with per-channel scales.
+// Computes: out = x @ dequantize(qweight).T
+// x: [M, K] activations, qweight: [N, K] int8, scale: [N], out: [M, N]
+func PopcornDequantizeMatmul(x, qweight, scale *tendo.Tensor) (*tendo.Tensor, error) {
+	xStorage, ok := x.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: x.Device().Type}
+	}
+	qweightStorage, ok := qweight.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: qweight.Device().Type}
+	}
+	scaleStorage, ok := scale.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: scale.Device().Type}
+	}
+
+	xShape := x.Shape()
+	qShape := qweight.Shape()
+
+	// x: [M, K], qweight: [N, K]
+	M := xShape[0]
+	K := xShape[1]
+	N := qShape[0]
+
+	outStorage, err := NewStorage(M*N, x.DType(), xStorage.device)
+	if err != nil {
+		return nil, err
+	}
+
+	status := C.popcornDequantizeMatmul_i8f32(
+		(*C.float)(unsafe.Pointer(outStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(xStorage.Ptr())),
+		(*C.int8_t)(unsafe.Pointer(qweightStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(scaleStorage.Ptr())),
+		C.int64_t(M),
+		C.int64_t(N),
+		C.int64_t(K),
+		nil,
+	)
+	if err := popcornError(status); err != nil {
+		outStorage.Free()
+		return nil, err
+	}
+
+	return tendo.NewTensor(outStorage, []int{M, N}, nil), nil
+}
+
+// PopcornDequantizeMatmulGrouped performs fused dequantize + matmul with per-group scales.
+// Computes: out = x @ dequantize(qweight).T
+// x: [M, K], qweight: [N, K] int8, scale: [N, num_groups], out: [M, N]
+func PopcornDequantizeMatmulGrouped(x, qweight, scale *tendo.Tensor, groupSize int) (*tendo.Tensor, error) {
+	xStorage, ok := x.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: x.Device().Type}
+	}
+	qweightStorage, ok := qweight.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: qweight.Device().Type}
+	}
+	scaleStorage, ok := scale.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: scale.Device().Type}
+	}
+
+	xShape := x.Shape()
+	qShape := qweight.Shape()
+
+	M := xShape[0]
+	K := xShape[1]
+	N := qShape[0]
+
+	outStorage, err := NewStorage(M*N, x.DType(), xStorage.device)
+	if err != nil {
+		return nil, err
+	}
+
+	status := C.popcornDequantizeMatmulGrouped_i8f32(
+		(*C.float)(unsafe.Pointer(outStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(xStorage.Ptr())),
+		(*C.int8_t)(unsafe.Pointer(qweightStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(scaleStorage.Ptr())),
+		C.int64_t(M),
+		C.int64_t(N),
+		C.int64_t(K),
+		C.int64_t(groupSize),
+		nil,
+	)
+	if err := popcornError(status); err != nil {
+		outStorage.Free()
+		return nil, err
+	}
+
+	return tendo.NewTensor(outStorage, []int{M, N}, nil), nil
+}
+
+// PopcornDequantizeMatmulBatched performs batched fused dequantize + matmul.
+// Computes: out[b] = x[b] @ dequantize(qweight).T for each batch
+// x: [B, M, K], qweight: [N, K] (shared), scale: [N], out: [B, M, N]
+func PopcornDequantizeMatmulBatched(x, qweight, scale *tendo.Tensor) (*tendo.Tensor, error) {
+	xStorage, ok := x.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: x.Device().Type}
+	}
+	qweightStorage, ok := qweight.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: qweight.Device().Type}
+	}
+	scaleStorage, ok := scale.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: scale.Device().Type}
+	}
+
+	xShape := x.Shape()
+	qShape := qweight.Shape()
+
+	B := xShape[0]
+	M := xShape[1]
+	K := xShape[2]
+	N := qShape[0]
+
+	outStorage, err := NewStorage(B*M*N, x.DType(), xStorage.device)
+	if err != nil {
+		return nil, err
+	}
+
+	status := C.popcornDequantizeMatmulBatched_i8f32(
+		(*C.float)(unsafe.Pointer(outStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(xStorage.Ptr())),
+		(*C.int8_t)(unsafe.Pointer(qweightStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(scaleStorage.Ptr())),
+		C.int64_t(B),
+		C.int64_t(M),
+		C.int64_t(N),
+		C.int64_t(K),
+		nil,
+	)
+	if err := popcornError(status); err != nil {
+		outStorage.Free()
+		return nil, err
+	}
+
+	return tendo.NewTensor(outStorage, []int{B, M, N}, nil), nil
+}
+
+// PopcornDequantizeMatmulInt4Grouped performs INT4 dequantize + matmul with asymmetric quantization.
+// Computes: out = x @ dequantize(qweight).T
+// qweight is packed: 2 int4 values per byte
+// x: [M, K], qweight: [N, K/2] packed, scale: [N, groups], zero: [N, groups], out: [M, N]
+func PopcornDequantizeMatmulInt4Grouped(x, qweight, scale, zero *tendo.Tensor, groupSize int) (*tendo.Tensor, error) {
+	xStorage, ok := x.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: x.Device().Type}
+	}
+	qweightStorage, ok := qweight.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: qweight.Device().Type}
+	}
+	scaleStorage, ok := scale.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: scale.Device().Type}
+	}
+	zeroStorage, ok := zero.Storage().(*Storage)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: zero.Device().Type}
+	}
+
+	xShape := x.Shape()
+	qShape := qweight.Shape()
+
+	M := xShape[0]
+	K := xShape[1]        // original K (not packed)
+	N := qShape[0]
+
+	outStorage, err := NewStorage(M*N, x.DType(), xStorage.device)
+	if err != nil {
+		return nil, err
+	}
+
+	status := C.popcornDequantizeMatmulGrouped_i4f32(
+		(*C.float)(unsafe.Pointer(outStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(xStorage.Ptr())),
+		(*C.uint8_t)(unsafe.Pointer(qweightStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(scaleStorage.Ptr())),
+		(*C.float)(unsafe.Pointer(zeroStorage.Ptr())),
+		C.int64_t(M),
+		C.int64_t(N),
+		C.int64_t(K),
+		C.int64_t(groupSize),
+		nil,
+	)
+	if err := popcornError(status); err != nil {
+		outStorage.Free()
+		return nil, err
+	}
+
+	return tendo.NewTensor(outStorage, []int{M, N}, nil), nil
 }

@@ -57,6 +57,21 @@ func NewStorageFromSlice(data []float32, dtype tendo.DType, device int) (*Storag
 	return storage, nil
 }
 
+// NewInt64StorageFromSlice creates CUDA storage initialized with int64 host data.
+func NewInt64StorageFromSlice(data []int64, device int) (*Storage, error) {
+	storage, err := NewStorage(len(data), tendo.Int64, device)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := storage.CopyFromHostInt64(data); err != nil {
+		storage.Free()
+		return nil, err
+	}
+
+	return storage, nil
+}
+
 // Ptr returns the device pointer.
 func (s *Storage) Ptr() uintptr {
 	return s.ptr
@@ -139,6 +154,23 @@ func (s *Storage) CopyFromHost(data []float32) error {
 	}
 }
 
+// CopyFromHostInt64 copies int64 data from a host slice to the device.
+func (s *Storage) CopyFromHostInt64(data []int64) error {
+	if s.dtype != tendo.Int64 {
+		return &tendo.ShapeError{Op: "CopyFromHostInt64", Message: "storage is not int64"}
+	}
+	if len(data) > s.len {
+		return &tendo.ShapeError{Op: "CopyFromHostInt64", Message: "data too large for storage"}
+	}
+	if len(data) == 0 {
+		return nil
+	}
+
+	src := unsafe.Pointer(&data[0])
+	size := len(data) * 8
+	return cudaMemcpy(unsafe.Pointer(s.ptr), src, size, cudaMemcpyHostToDevice)
+}
+
 // CopyToHost copies data from the device to a host slice.
 // For Float16/BFloat16 storage, data is converted to float32.
 func (s *Storage) CopyToHost() ([]float32, error) {
@@ -177,6 +209,24 @@ func (s *Storage) CopyToHost() ([]float32, error) {
 	default:
 		return nil, &tendo.ShapeError{Op: "CopyToHost", Message: "unsupported dtype"}
 	}
+}
+
+// CopyToHostInt64 copies int64 data from the device to a host slice.
+func (s *Storage) CopyToHostInt64() ([]int64, error) {
+	if s.dtype != tendo.Int64 {
+		return nil, &tendo.ShapeError{Op: "CopyToHostInt64", Message: "storage is not int64"}
+	}
+	if s.len == 0 {
+		return make([]int64, 0), nil
+	}
+
+	result := make([]int64, s.len)
+	dst := unsafe.Pointer(&result[0])
+	err := cudaMemcpy(dst, unsafe.Pointer(s.ptr), s.size, cudaMemcpyDeviceToHost)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // CopyToHostSlice copies data from the device to an existing host slice.
@@ -282,6 +332,8 @@ func dtypeSize(dtype tendo.DType) int {
 		return 4
 	case tendo.Float16, tendo.BFloat16:
 		return 2
+	case tendo.Int64:
+		return 8
 	default:
 		return 4
 	}

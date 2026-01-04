@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/zoobzio/tendo"
-	"github.com/zoobzio/tendo/pkg/cpu"
+	"github.com/zoobzio/tendo/cpu"
 )
 
 func TestAdd(t *testing.T) {

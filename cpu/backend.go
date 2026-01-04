@@ -87,6 +87,15 @@ func (b *Backend) FromSlice(data []float32, shape ...int) (*tendo.Tensor, error)
 	return tendo.NewTensor(storage, shape, nil), nil
 }
 
+func (b *Backend) FromInt64Slice(data []int64, shape ...int) (*tendo.Tensor, error) {
+	numel := tendo.Numel(shape)
+	if numel != len(data) {
+		return nil, tendo.ErrShapeMismatch
+	}
+	storage := NewInt64StorageFromSlice(data)
+	return tendo.NewTensor(storage, shape, nil), nil
+}
+
 func (b *Backend) Rand(shape ...int) (*tendo.Tensor, error) {
 	numel := tendo.Numel(shape)
 	data := make([]float32, numel)
@@ -1238,10 +1247,6 @@ func (b *Backend) Embedding(_ context.Context, weight, indices *tendo.Tensor) (*
 	if !ok {
 		return nil, &tendo.DeviceError{Expected: tendo.CPU, Got: weight.Device().Type}
 	}
-	cpuIndices, ok := indices.Storage().(tendo.CPUDataAccessor)
-	if !ok {
-		return nil, &tendo.DeviceError{Expected: tendo.CPU, Got: indices.Device().Type}
-	}
 
 	// weight shape: [vocab_size, embed_dim]
 	weightShape := weight.Shape()
@@ -1257,14 +1262,32 @@ func (b *Backend) Embedding(_ context.Context, weight, indices *tendo.Tensor) (*
 	result := make([]float32, outNumel)
 
 	weightData := cpuWeight.Data()
-	indicesData := cpuIndices.Data()
 
-	// Flatten indices and gather embeddings
-	for i := 0; i < n; i++ {
-		idx := int(indicesData[i])
-		srcOffset := idx * embedDim
-		dstOffset := i * embedDim
-		copy(result[dstOffset:dstOffset+embedDim], weightData[srcOffset:srcOffset+embedDim])
+	// Handle both int64 and float32 indices (float32 for backward compatibility)
+	if indices.DType() == tendo.Int64 {
+		int64Accessor, ok := indices.Storage().(tendo.CPUInt64DataAccessor)
+		if !ok {
+			return nil, &tendo.DeviceError{Expected: tendo.CPU, Got: indices.Device().Type}
+		}
+		indicesData := int64Accessor.Int64Data()
+		for i := 0; i < n; i++ {
+			idx := int(indicesData[i])
+			srcOffset := idx * embedDim
+			dstOffset := i * embedDim
+			copy(result[dstOffset:dstOffset+embedDim], weightData[srcOffset:srcOffset+embedDim])
+		}
+	} else {
+		floatAccessor, ok := indices.Storage().(tendo.CPUDataAccessor)
+		if !ok {
+			return nil, &tendo.DeviceError{Expected: tendo.CPU, Got: indices.Device().Type}
+		}
+		indicesData := floatAccessor.Data()
+		for i := 0; i < n; i++ {
+			idx := int(indicesData[i])
+			srcOffset := idx * embedDim
+			dstOffset := i * embedDim
+			copy(result[dstOffset:dstOffset+embedDim], weightData[srcOffset:srcOffset+embedDim])
+		}
 	}
 
 	storage := NewStorageFromSlice(result, weight.DType())
@@ -1592,7 +1615,7 @@ func (b *Backend) argReduce(t *tendo.Tensor, dim int, keepdim bool, findMax bool
 		outNumel = 1
 	}
 
-	result := make([]float32, outNumel)
+	result := make([]int64, outNumel)
 	resultIdx := 0
 
 	tendo.IterateSlices(shape, strides, dim, func(baseIdx, dimStride int) {
@@ -1612,11 +1635,11 @@ func (b *Backend) argReduce(t *tendo.Tensor, dim int, keepdim bool, findMax bool
 				}
 			}
 		}
-		result[resultIdx] = float32(bestIdx)
+		result[resultIdx] = int64(bestIdx)
 		resultIdx++
 	})
 
-	storage := NewStorageFromSlice(result, tendo.Int64)
+	storage := NewInt64StorageFromSlice(result)
 	return tendo.NewTensor(storage, outShape, nil), nil
 }
 

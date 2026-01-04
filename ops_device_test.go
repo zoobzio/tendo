@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/zoobzio/tendo"
-	"github.com/zoobzio/tendo/pkg/cuda"
+	"github.com/zoobzio/tendo/cuda"
 )
 
 func TestTo(t *testing.T) {

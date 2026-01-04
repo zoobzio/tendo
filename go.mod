@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/daulet/tokenizers v1.24.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/zoobzio/clockz v0.0.2 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect

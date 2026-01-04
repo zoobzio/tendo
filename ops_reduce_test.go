@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/zoobzio/tendo"
-	"github.com/zoobzio/tendo/pkg/cpu"
+	"github.com/zoobzio/tendo/cpu"
 )
 
 func TestSum(t *testing.T) {
@@ -237,8 +237,8 @@ func TestArgMax(t *testing.T) {
 			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
 		}
 
-		data := result.MustData()
-		expected := []float32{1, 0, 1}
+		data := result.MustInt64Data()
+		expected := []int64{1, 0, 1}
 		for i, v := range expected {
 			if data[i] != v {
 				t.Errorf("at index %d: expected %v, got %v", i, v, data[i])
@@ -261,8 +261,8 @@ func TestArgMax(t *testing.T) {
 			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
 		}
 
-		data := result.MustData()
-		expected := []float32{1, 2}
+		data := result.MustInt64Data()
+		expected := []int64{1, 2}
 		for i, v := range expected {
 			if data[i] != v {
 				t.Errorf("at index %d: expected %v, got %v", i, v, data[i])
@@ -289,8 +289,8 @@ func TestArgMax(t *testing.T) {
 			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
 		}
 
-		resultData := result.MustData()
-		expected := []float32{2, 2, 2, 2}
+		resultData := result.MustInt64Data()
+		expected := []int64{2, 2, 2, 2}
 		for i, v := range expected {
 			if resultData[i] != v {
 				t.Errorf("at index %d: expected %v, got %v", i, v, resultData[i])
@@ -313,8 +313,8 @@ func TestArgMin(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		data := result.MustData()
-		expected := []float32{0, 1}
+		data := result.MustInt64Data()
+		expected := []int64{0, 1}
 		for i, v := range expected {
 			if data[i] != v {
 				t.Errorf("at index %d: expected %v, got %v", i, v, data[i])

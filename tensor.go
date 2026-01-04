@@ -339,5 +339,28 @@ func (t *Tensor) MustData() []float32 {
 	return data
 }
 
+// Int64Data retrieves int64 tensor data.
+// For CPU tensors, returns the underlying slice directly.
+// For GPU tensors, copies data to host (allocates new slice).
+func (t *Tensor) Int64Data() ([]int64, error) {
+	if cpu, ok := t.storage.(CPUInt64DataAccessor); ok {
+		return cpu.Int64Data(), nil
+	}
+	if copier, ok := t.storage.(Int64HostCopier); ok {
+		return copier.CopyToHostInt64()
+	}
+	return nil, fmt.Errorf("storage type %T does not support int64 data access", t.storage)
+}
+
+// MustInt64Data returns the int64 tensor data, panicking on error.
+// Intended for use in tests.
+func (t *Tensor) MustInt64Data() []int64 {
+	data, err := t.Int64Data()
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
 // Compile-time check: *Tensor implements the Cloner interface pattern.
 var _ interface{ Clone() *Tensor } = (*Tensor)(nil)
