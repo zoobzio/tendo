@@ -550,12 +550,11 @@ func IsCUDA(t *tendo.Tensor) bool {
 	return t.Device().Type == tendo.CUDA
 }
 
-// Dropout applies dropout on GPU and returns both output and mask.
-// The mask is needed for the backward pass.
-func Dropout(ctx context.Context, t *tendo.Tensor, p float32) (output, mask *tendo.Tensor, err error) {
+// Dropout applies dropout on GPU, randomly zeroing elements with probability p.
+func Dropout(ctx context.Context, t *tendo.Tensor, p float32) (*tendo.Tensor, error) {
 	cudaStorage, ok := t.Storage().(*Storage)
 	if !ok {
-		return nil, nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: t.Device().Type}
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: t.Device().Type}
 	}
 
 	numel := t.Numel()
@@ -575,26 +574,25 @@ func Dropout(ctx context.Context, t *tendo.Tensor, p float32) (output, mask *ten
 	// Transfer mask to GPU
 	maskStorage, err := NewStorageFromSlice(maskData, t.DType(), cudaStorage.device)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	mask = tendo.NewTensor(maskStorage, t.Shape(), nil)
+	mask := tendo.NewTensor(maskStorage, t.Shape(), nil)
+	defer mask.Storage().Free()
 
 	// Apply: output = input * mask
 	temp, err := PopcornMul(t, mask)
 	if err != nil {
-		mask.Storage().Free()
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Scale by 1/(1-p)
-	output, err = PopcornMulScalar(temp, scale)
+	output, err := PopcornMulScalar(temp, scale)
 	temp.Storage().Free()
 	if err != nil {
-		mask.Storage().Free()
-		return nil, nil, err
+		return nil, err
 	}
 
-	return output, mask, nil
+	return output, nil
 }
 
 // randFloat32 returns a random float32 in [0, 1).
@@ -603,38 +601,37 @@ func randFloat32() float32 {
 }
 
 // Pool2d performs 2D pooling using cuDNN.
-// Returns the output tensor and max indices (for backward pass, nil for avg pooling).
-func Pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int, maxPool bool) (*tendo.Tensor, []int, error) {
+func Pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int, maxPool bool) (*tendo.Tensor, error) {
 	cudaStorage, ok := input.Storage().(*Storage)
 	if !ok {
-		return nil, nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: input.Device().Type}
+		return nil, &tendo.DeviceError{Expected: tendo.CUDA, Got: input.Device().Type}
 	}
 
 	handle, err := getCudnnHandle()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	inShape := input.Shape()
 	if len(inShape) != 4 {
-		return nil, nil, &tendo.ShapeError{Op: "pool2d", Message: "input must be 4D [N, C, H, W]"}
+		return nil, &tendo.ShapeError{Op: "pool2d", Message: "input must be 4D [N, C, H, W]"}
 	}
 
 	// Create input tensor descriptor
 	xDesc, err := cudnnCreateTensorDescriptor()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer cudnnDestroyTensorDescriptor(xDesc)
 
 	if err := cudnnSetTensor4dDescriptor(xDesc, inShape[0], inShape[1], inShape[2], inShape[3]); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Create pooling descriptor
 	poolDesc, err := cudnnCreatePoolingDescriptor()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer cudnnDestroyPoolingDescriptor(poolDesc)
 
@@ -647,30 +644,30 @@ func Pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int, maxPool boo
 		kernelSize[0], kernelSize[1],
 		padding[0], padding[1],
 		stride[0], stride[1]); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Get output dimensions
 	outN, outC, outH, outW, err := cudnnGetPooling2dForwardOutputDim(poolDesc, xDesc)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Create output tensor descriptor
 	yDesc, err := cudnnCreateTensorDescriptor()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer cudnnDestroyTensorDescriptor(yDesc)
 
 	if err := cudnnSetTensor4dDescriptor(yDesc, outN, outC, outH, outW); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Create output storage
 	outStorage, err := NewStorage(outN*outC*outH*outW, input.DType(), cudaStorage.device)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Apply pooling
@@ -682,10 +679,10 @@ func Pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int, maxPool boo
 	)
 	if err != nil {
 		outStorage.Free()
-		return nil, nil, err
+		return nil, err
 	}
 
-	return tendo.NewTensor(outStorage, []int{outN, outC, outH, outW}, nil), nil, nil
+	return tendo.NewTensor(outStorage, []int{outN, outC, outH, outW}, nil), nil
 }
 
 // BatchNorm2d performs 2D batch normalization using cuDNN.
@@ -766,9 +763,7 @@ func BatchNorm2d(ctx context.Context, input, weight, bias, runningMean, runningV
 
 	if training {
 		// Training mode: compute batch statistics and update running stats
-		// NOTE: saveMean and saveInvVariance are needed for backward pass but we have
-		// no mechanism to return them yet. For forward-only use, we free them after.
-		// TODO: When autograd is integrated, preserve and return these tensors.
+		// saveMean and saveInvVariance are allocated for cuDNN but freed after forward pass.
 		saveMeanStorage, err := NewStorage(C, tendo.Float32, cudaInput.device)
 		if err != nil {
 			outStorage.Free()

@@ -46,19 +46,9 @@ func (m *MaxPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		stride[1] = m.config.KernelSize[1]
 	}
 
-	result, indices, err := m.backend.MaxPool2d(ctx, t, m.config.KernelSize, stride, m.config.Padding)
+	result, err := m.backend.MaxPool2d(ctx, t, m.config.KernelSize, stride, m.config.Padding)
 	if err != nil {
 		return nil, fmt.Errorf("maxpool2d: %w", err)
-	}
-
-	// Convert indices to tensor if provided
-	var indicesTensor *Tensor
-	if len(indices) > 0 {
-		indicesStorage := NewCPUStorageFromSlice(make([]float32, len(indices)), Float32)
-		for i, idx := range indices {
-			indicesStorage.Data()[i] = float32(idx)
-		}
-		indicesTensor = NewTensor(indicesStorage, result.Shape(), nil)
 	}
 
 	emitWithTrace(ctx, OpMaxPool2d,
@@ -67,10 +57,7 @@ func (m *MaxPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyKernelSize.Field(m.config.KernelSize),
 		KeyPoolStride.Field(stride),
 		KeyPadding.Field(m.config.Padding),
-		KeyIndices.Field(indicesTensor),
 	)
-
-	propagateTape(t, result, "maxpool2d", map[string]*Tensor{"input": t, "indices": indicesTensor})
 
 	return result, nil
 }
@@ -128,7 +115,6 @@ func (a *AvgPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyPadding.Field(a.config.Padding),
 	)
 
-	propagateTape(t, result, "avgpool2d", map[string]*Tensor{"input": t})
 
 	return result, nil
 }
@@ -175,7 +161,6 @@ func (a *AdaptiveAvgPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, er
 		KeyOutputSize.Field(a.outputSize),
 	)
 
-	propagateTape(t, result, "adaptiveavgpool2d", map[string]*Tensor{"input": t})
 
 	return result, nil
 }
@@ -213,19 +198,9 @@ func NewAdaptiveMaxPool2d(backend PoolOps, outputSize [2]int) *AdaptiveMaxPool2d
 
 // Process applies adaptive max pooling.
 func (a *AdaptiveMaxPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
-	result, indices, err := a.backend.AdaptiveMaxPool2d(ctx, t, a.outputSize)
+	result, err := a.backend.AdaptiveMaxPool2d(ctx, t, a.outputSize)
 	if err != nil {
 		return nil, fmt.Errorf("adaptivemaxpool2d: %w", err)
-	}
-
-	// Convert indices to tensor if provided
-	var indicesTensor *Tensor
-	if len(indices) > 0 {
-		indicesStorage := NewCPUStorageFromSlice(make([]float32, len(indices)), Float32)
-		for i, idx := range indices {
-			indicesStorage.Data()[i] = float32(idx)
-		}
-		indicesTensor = NewTensor(indicesStorage, result.Shape(), nil)
 	}
 
 	emitWithTrace(ctx, OpAdaptiveMaxPool2d,
@@ -233,8 +208,6 @@ func (a *AdaptiveMaxPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, er
 		KeyOutput.Field(result),
 		KeyOutputSize.Field(a.outputSize),
 	)
-
-	propagateTape(t, result, "adaptivemaxpool2d", map[string]*Tensor{"input": t, "indices": indicesTensor})
 
 	return result, nil
 }

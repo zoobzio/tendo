@@ -91,7 +91,6 @@ func (c *Conv2d) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 		KeyGroups.Field(c.config.Groups),
 	)
 
-	propagateTape(input, result, "conv2d", map[string]*Tensor{"input": input, "weight": c.weight})
 
 	return result, nil
 }
@@ -183,7 +182,6 @@ func (c *ConvTranspose2d) Process(ctx context.Context, input *Tensor) (*Tensor, 
 		KeyGroups.Field(c.config.Groups),
 	)
 
-	propagateTape(input, result, "convtranspose2d", map[string]*Tensor{"input": input, "weight": c.weight})
 
 	return result, nil
 }

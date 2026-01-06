@@ -27,7 +27,7 @@ var (
 	TensorTransfer = capitan.NewSignal("tendo.tensor.transfer", "Tensor moved between devices")
 )
 
-// Operation signals - emitted during forward pass for autograd capture.
+// Operation signals - emitted during forward pass for observability.
 var (
 	// Element-wise operations.
 	OpAdd    = capitan.NewSignal("tendo.op.add", "Element-wise addition")
@@ -165,14 +165,8 @@ var (
 	// KeyOpName is the operation name.
 	KeyOpName = capitan.NewStringKey("op_name")
 
-	// KeyTraceID is the pipeline trace identifier for autograd graph correlation.
+	// KeyTraceID is the pipeline trace identifier for operation correlation.
 	KeyTraceID = capitan.NewStringKey("trace_id")
-
-	// KeyMask is the dropout mask tensor.
-	KeyMask = capitan.NewKey[*Tensor]("mask", VariantTensor)
-
-	// KeyReserveSpace is a handle to cuDNN's internal reserve space (for GPU dropout).
-	KeyReserveSpace = capitan.NewKey[uintptr]("reserve_space", VariantUintptr)
 
 	// KeyStart is the start index for slice operations.
 	KeyStart = capitan.NewIntKey("start")
@@ -207,7 +201,7 @@ var (
 	// KeyPoolStride is the stride for pooling operations.
 	KeyPoolStride = capitan.NewKey[[2]int]("pool_stride", VariantIntPair)
 
-	// KeyIndices is the max indices tensor for max pooling (for backward pass).
+	// KeyIndices is the indices tensor (e.g., for embedding lookups).
 	KeyIndices = capitan.NewKey[*Tensor]("indices", VariantTensor)
 
 	// KeyEpsilon is the epsilon value for numerical stability in normalization.

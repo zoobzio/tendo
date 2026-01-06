@@ -34,7 +34,6 @@ func (r *ReLU) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "relu", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -79,7 +78,6 @@ func (s *Sigmoid) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "sigmoid", map[string]*Tensor{"output": out})
 
 	return out, nil
 }
@@ -123,7 +121,6 @@ func (t *Tanh) Process(ctx context.Context, in *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(in, out, "tanh", map[string]*Tensor{"output": out})
 
 	return out, nil
 }
@@ -168,7 +165,6 @@ func (g *GELU) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "gelu", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -213,7 +209,6 @@ func (s *SiLU) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "silu", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -261,7 +256,6 @@ func (s *Softmax) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDim.Field(s.dim),
 	)
 
-	propagateTape(t, out, "softmax", map[string]*Tensor{"output": out})
 
 	return out, nil
 }
@@ -309,7 +303,6 @@ func (l *LogSoftmax) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDim.Field(l.dim),
 	)
 
-	propagateTape(t, out, "logsoftmax", map[string]*Tensor{"output": out})
 
 	return out, nil
 }
@@ -357,7 +350,6 @@ func (l *LeakyReLU) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyScalar.Field(l.negativeSlope),
 	)
 
-	propagateTape(t, out, "leaky_relu", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -397,7 +389,7 @@ func NewDropout(backend ActivationOps, p float32) *Dropout {
 // Process applies dropout to the input tensor.
 func (d *Dropout) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 	training := IsTraining(ctx)
-	out, mask, err := d.backend.Dropout(ctx, t, d.p, training)
+	out, err := d.backend.Dropout(ctx, t, d.p, training)
 	if err != nil {
 		return nil, fmt.Errorf("dropout: %w", err)
 	}
@@ -407,8 +399,6 @@ func (d *Dropout) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 		KeyScalar.Field(d.p),
 	)
-
-	propagateTape(t, out, "dropout", map[string]*Tensor{"mask": mask})
 
 	return out, nil
 }

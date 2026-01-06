@@ -36,7 +36,6 @@ func (a *Add) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "add", nil)
 
 	return out, nil
 }
@@ -81,7 +80,6 @@ func (s *Sub) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "sub", nil)
 
 	return out, nil
 }
@@ -126,7 +124,6 @@ func (m *Mul) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "mul", map[string]*Tensor{"a": t, "b": m.other})
 
 	return out, nil
 }
@@ -171,7 +168,6 @@ func (d *Div) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "div", map[string]*Tensor{"a": t, "b": d.other})
 
 	return out, nil
 }
@@ -213,7 +209,6 @@ func (n *Neg) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "neg", nil)
 
 	return out, nil
 }
@@ -255,7 +250,6 @@ func (a *Abs) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "abs", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -297,7 +291,6 @@ func (e *Exp) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "exp", map[string]*Tensor{"output": out})
 
 	return out, nil
 }
@@ -339,7 +332,6 @@ func (l *Log) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "log", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -381,7 +373,6 @@ func (s *Sqrt) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "sqrt", map[string]*Tensor{"output": out})
 
 	return out, nil
 }
@@ -423,7 +414,6 @@ func (s *Square) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "square", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -465,9 +455,6 @@ func (s *Sign) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyInput.Field(t),
 		KeyOutput.Field(out),
 	)
-
-	// Sign is non-differentiable but we still propagate tape for graph structure
-	propagateTape(t, out, "sign", nil)
 
 	return out, nil
 }
@@ -512,7 +499,6 @@ func (p *Pow) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyScalar.Field(p.exp),
 	)
 
-	propagateTape(t, out, "pow", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -560,7 +546,6 @@ func (c *Clamp) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyMax.Field(c.max),
 	)
 
-	propagateTape(t, out, "clamp", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -609,7 +594,6 @@ func (w *Where) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "where", map[string]*Tensor{"condition": w.condition})
 
 	return out, nil
 }
@@ -651,7 +635,6 @@ func (s *Sin) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "sin", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -693,7 +676,6 @@ func (c *Cos) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 	)
 
-	propagateTape(t, out, "cos", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -740,7 +722,6 @@ func (tr *Tril) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyK.Field(tr.k),
 	)
 
-	propagateTape(t, out, "tril", nil)
 
 	return out, nil
 }

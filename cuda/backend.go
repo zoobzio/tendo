@@ -418,9 +418,9 @@ func (b *Backend) LeakyReLU(_ context.Context, t *tendo.Tensor, negativeSlope fl
 	return PopcornLeakyRelu(t, negativeSlope)
 }
 
-func (b *Backend) Dropout(ctx context.Context, t *tendo.Tensor, p float32, training bool) (output, mask *tendo.Tensor, err error) {
+func (b *Backend) Dropout(ctx context.Context, t *tendo.Tensor, p float32, training bool) (*tendo.Tensor, error) {
 	if !training {
-		return t, nil, nil
+		return t, nil
 	}
 	return Dropout(ctx, t, p)
 }
@@ -464,13 +464,12 @@ func (b *Backend) ConvTranspose2d(_ context.Context, input, weight *tendo.Tensor
 
 // --- PoolOps ---
 
-func (b *Backend) MaxPool2d(_ context.Context, input *tendo.Tensor, kernelSize, stride, padding [2]int) (*tendo.Tensor, []int, error) {
+func (b *Backend) MaxPool2d(_ context.Context, input *tendo.Tensor, kernelSize, stride, padding [2]int) (*tendo.Tensor, error) {
 	return Pool2d(input, kernelSize, stride, padding, true)
 }
 
 func (b *Backend) AvgPool2d(_ context.Context, input *tendo.Tensor, kernelSize, stride, padding [2]int) (*tendo.Tensor, error) {
-	result, _, err := Pool2d(input, kernelSize, stride, padding, false)
-	return result, err
+	return Pool2d(input, kernelSize, stride, padding, false)
 }
 
 func (b *Backend) AdaptiveAvgPool2d(_ context.Context, input *tendo.Tensor, outputSize [2]int) (*tendo.Tensor, error) {
@@ -496,14 +495,13 @@ func (b *Backend) AdaptiveAvgPool2d(_ context.Context, input *tendo.Tensor, outp
 		strideW = 1
 	}
 
-	result, _, err := Pool2d(input, [2]int{kernelH, kernelW}, [2]int{strideH, strideW}, [2]int{0, 0}, false)
-	return result, err
+	return Pool2d(input, [2]int{kernelH, kernelW}, [2]int{strideH, strideW}, [2]int{0, 0}, false)
 }
 
-func (b *Backend) AdaptiveMaxPool2d(_ context.Context, input *tendo.Tensor, outputSize [2]int) (*tendo.Tensor, []int, error) {
+func (b *Backend) AdaptiveMaxPool2d(_ context.Context, input *tendo.Tensor, outputSize [2]int) (*tendo.Tensor, error) {
 	inShape := input.Shape()
 	if len(inShape) != 4 {
-		return nil, nil, &tendo.ShapeError{Op: "adaptivemaxpool2d", Message: "input must be 4D [N, C, H, W]"}
+		return nil, &tendo.ShapeError{Op: "adaptivemaxpool2d", Message: "input must be 4D [N, C, H, W]"}
 	}
 
 	inH, inW := inShape[2], inShape[3]

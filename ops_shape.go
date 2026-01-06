@@ -55,7 +55,6 @@ func (r *Reshape) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 			KeyShape.Field(newShape),
 		)
 
-		propagateTape(t, result, "reshape", nil)
 
 		return result, nil
 	}
@@ -71,7 +70,6 @@ func (r *Reshape) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyShape.Field(newShape),
 	)
 
-	propagateTape(t, result, "reshape", nil)
 
 	return result, nil
 }
@@ -140,7 +138,6 @@ func (v *View) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyShape.Field(newShape),
 	)
 
-	propagateTape(t, result, "view", nil)
 
 	return result, nil
 }
@@ -233,7 +230,6 @@ func (s *Squeeze) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyShape.Field(newShape),
 	)
 
-	propagateTape(t, result, "squeeze", nil)
 
 	return result, nil
 }
@@ -313,7 +309,6 @@ func (u *Unsqueeze) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyShape.Field(newShape),
 	)
 
-	propagateTape(t, result, "unsqueeze", nil)
 
 	return result, nil
 }
@@ -399,7 +394,6 @@ func (f *Flatten) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyShape.Field(newShape),
 	)
 
-	propagateTape(t, result, "flatten", nil)
 
 	return result, nil
 }
@@ -491,7 +485,6 @@ func (sl *Slice) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyEnd.Field(end),
 	)
 
-	propagateTape(t, result, "slice", nil)
 
 	return result, nil
 }
@@ -617,7 +610,6 @@ func (e *Expand) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyShape.Field(e.shape),
 	)
 
-	propagateTape(t, result, "expand", nil)
 
 	return result, nil
 }
@@ -698,7 +690,6 @@ func (p *Permute) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyPermutation.Field(p.dims),
 	)
 
-	propagateTape(t, result, "permute", nil)
 
 	return result, nil
 }
@@ -758,7 +749,6 @@ func (c *Cat) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 			KeyDim.Field(c.dim),
 		)
 
-		propagateTape(t, result, "cat", nil)
 
 		return result, nil
 	}
@@ -833,7 +823,6 @@ func (c *Cat) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDim.Field(dim),
 	)
 
-	propagateTape(t, result, "cat", nil)
 
 	return result, nil
 }
@@ -911,7 +900,6 @@ func (s *Stack) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 			KeyDim.Field(s.dim),
 		)
 
-		propagateTape(t, result, "stack", nil)
 
 		return result, nil
 	}
@@ -1002,7 +990,6 @@ func (s *Stack) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDim.Field(dim),
 	)
 
-	propagateTape(t, result, "stack", nil)
 
 	return result, nil
 }

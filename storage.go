@@ -1,8 +1,8 @@
 // Package tendo provides a composable tensor library for Go with GPU acceleration.
 //
 // Tendo builds on pipz for operation composition and capitan for observability,
-// enabling construction of neural network forward passes as pipz pipelines
-// with automatic event emission for downstream autograd integration.
+// enabling construction of neural network inference pipelines with automatic
+// event emission for logging, profiling, and debugging.
 package tendo
 
 import (

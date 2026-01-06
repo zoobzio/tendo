@@ -47,7 +47,6 @@ func (m *MSELoss) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 		KeyReduction.Field(m.reduction),
 	)
 
-	propagateTape(input, result, "mseloss", map[string]*Tensor{"input": input, "target": m.target})
 
 	return result, nil
 }
@@ -96,7 +95,6 @@ func (l *L1Loss) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 		KeyReduction.Field(l.reduction),
 	)
 
-	propagateTape(input, result, "l1loss", map[string]*Tensor{"input": input, "target": l.target})
 
 	return result, nil
 }
@@ -147,7 +145,6 @@ func (c *CrossEntropyLoss) Process(ctx context.Context, input *Tensor) (*Tensor,
 		KeyReduction.Field(c.reduction),
 	)
 
-	propagateTape(input, result, "crossentropyloss", map[string]*Tensor{"input": input, "target": c.target})
 
 	return result, nil
 }
@@ -198,7 +195,6 @@ func (n *NLLLoss) Process(ctx context.Context, input *Tensor) (*Tensor, error) {
 		KeyReduction.Field(n.reduction),
 	)
 
-	propagateTape(input, result, "nllloss", map[string]*Tensor{"input": input, "target": n.target})
 
 	return result, nil
 }

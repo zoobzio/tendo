@@ -38,7 +38,6 @@ func (m *MatMul) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyShape.Field(result.Shape()),
 	)
 
-	propagateTape(t, result, "matmul", map[string]*Tensor{"a": t, "b": m.other})
 
 	return result, nil
 }
@@ -101,7 +100,6 @@ func (tr *Transpose) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDim1.Field(tr.dim1),
 	)
 
-	propagateTape(t, result, "transpose", nil)
 
 	return result, nil
 }
@@ -165,7 +163,6 @@ func (t *T) Process(ctx context.Context, in *Tensor) (*Tensor, error) {
 		KeyDim1.Field(dim1),
 	)
 
-	propagateTape(in, result, "t", nil)
 
 	return result, nil
 }

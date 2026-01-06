@@ -73,14 +73,14 @@ func NewTensorFromContext(ctx context.Context, shape []int, dtype DType) *Tensor
 	return NewTensorFromPool(PoolFromContext(ctx), shape, dtype)
 }
 
-// Trace ID context key and helpers for autograd graph correlation
+// Trace ID context key and helpers for operation correlation
 
 type traceIDKey struct{}
 
 // WithTraceID returns a context with the given trace ID.
 // All operations executed with this context will include the trace ID
-// in their emitted events, enabling autograd to correlate operations
-// into a single computational graph.
+// in their emitted events, enabling correlation of operations for
+// debugging and profiling.
 func WithTraceID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, traceIDKey{}, id)
 }
@@ -95,28 +95,12 @@ func TraceID(ctx context.Context) string {
 
 // emitWithTrace wraps capitan.Emit to automatically include the trace ID
 // when present in the context. This ensures all operation events can be
-// correlated into a single computational graph for autograd.
+// correlated for debugging and profiling.
 func emitWithTrace(ctx context.Context, signal capitan.Signal, fields ...capitan.Field) {
 	if id := TraceID(ctx); id != "" {
 		fields = append(fields, KeyTraceID.Field(id))
 	}
 	capitan.Emit(ctx, signal, fields...)
-}
-
-// propagateTape copies tape from input to output and records an operation if tape exists.
-// This should be called at the end of each op's Process method.
-// The saved map contains tensors needed for the backward pass (e.g., "input", "output").
-func propagateTape(input, output *Tensor, opName string, saved map[string]*Tensor) {
-	// Propagate requiresGrad from input to output
-	if input.requiresGrad {
-		output.requiresGrad = true
-	}
-
-	// Only record to tape if input requires grad and has a tape
-	if input.requiresGrad && input.tape != nil {
-		output.tape = input.tape
-		output.tape.Record(opName, saved)
-	}
 }
 
 // Op creates a named Chainable operation that can fail.

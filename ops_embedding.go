@@ -44,7 +44,6 @@ func (e *Embedding) Process(ctx context.Context, indices *Tensor) (*Tensor, erro
 		KeyOutput.Field(result),
 	)
 
-	propagateTape(indices, result, "embedding", map[string]*Tensor{"weight": e.weight, "indices": indices})
 
 	return result, nil
 }

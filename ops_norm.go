@@ -54,7 +54,6 @@ func (b *BatchNorm2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyMomentum.Field(b.momentum),
 	)
 
-	propagateTape(t, result, "batchnorm2d", map[string]*Tensor{"input": t, "output": result})
 
 	return result, nil
 }
@@ -109,7 +108,6 @@ func (l *LayerNorm) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyEpsilon.Field(l.epsilon),
 	)
 
-	propagateTape(t, result, "layernorm", map[string]*Tensor{"input": t, "output": result})
 
 	return result, nil
 }
@@ -161,7 +159,6 @@ func (r *RMSNorm) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyEpsilon.Field(r.epsilon),
 	)
 
-	propagateTape(t, result, "rmsnorm", map[string]*Tensor{"input": t})
 
 	return result, nil
 }
@@ -217,7 +214,6 @@ func (g *GroupNorm) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyEpsilon.Field(g.epsilon),
 	)
 
-	propagateTape(t, result, "groupnorm", map[string]*Tensor{"input": t})
 
 	return result, nil
 }
@@ -270,7 +266,6 @@ func (i *InstanceNorm2d) Process(ctx context.Context, t *Tensor) (*Tensor, error
 		KeyEpsilon.Field(i.epsilon),
 	)
 
-	propagateTape(t, result, "instancenorm2d", map[string]*Tensor{"input": t})
 
 	return result, nil
 }

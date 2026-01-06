@@ -39,7 +39,6 @@ func (s *Sum) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDims.Field(s.dims),
 	)
 
-	propagateTape(t, out, "sum", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -87,7 +86,6 @@ func (m *Mean) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDims.Field(m.dims),
 	)
 
-	propagateTape(t, out, "mean", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -135,7 +133,6 @@ func (m *Max) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDims.Field(m.dims),
 	)
 
-	propagateTape(t, out, "max", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -183,7 +180,6 @@ func (m *Min) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDims.Field(m.dims),
 	)
 
-	propagateTape(t, out, "min", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -230,9 +226,6 @@ func (a *ArgMax) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDim.Field(a.dim),
 	)
 
-	// ArgMax is non-differentiable but we still propagate tape for graph structure
-	propagateTape(t, out, "argmax", nil)
-
 	return out, nil
 }
 
@@ -277,9 +270,6 @@ func (a *ArgMin) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyOutput.Field(out),
 		KeyDim.Field(a.dim),
 	)
-
-	// ArgMin is non-differentiable but we still propagate tape for graph structure
-	propagateTape(t, out, "argmin", nil)
 
 	return out, nil
 }
@@ -329,7 +319,6 @@ func (v *Var) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDims.Field(v.dims),
 	)
 
-	propagateTape(t, out, "var", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -379,7 +368,6 @@ func (s *Std) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDims.Field(s.dims),
 	)
 
-	propagateTape(t, out, "std", map[string]*Tensor{"input": t})
 
 	return out, nil
 }
@@ -427,7 +415,6 @@ func (p *Prod) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
 		KeyDims.Field(p.dims),
 	)
 
-	propagateTape(t, out, "prod", map[string]*Tensor{"input": t, "output": out})
 
 	return out, nil
 }

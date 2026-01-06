@@ -8,14 +8,11 @@ import (
 // It wraps a Storage backend and maintains shape/stride metadata
 // for interpreting the underlying data.
 type Tensor struct {
-	storage      Storage
-	pool         *Pool
-	tape         *Tape    // execution history for autograd, nil during inference
-	grad         *Tensor  // accumulated gradient, nil if not computed
-	shape        []int
-	stride       []int
-	offset       int
-	requiresGrad bool // whether this tensor participates in autograd
+	storage Storage
+	pool    *Pool
+	shape   []int
+	stride  []int
+	offset  int
 }
 
 // NewTensor creates a tensor with the given storage, shape, and stride.
@@ -110,11 +107,10 @@ func (t *Tensor) Clone() *Tensor {
 	copy(newStride, t.stride)
 
 	return &Tensor{
-		storage:      newStorage,
-		shape:        newShape,
-		stride:       newStride,
-		offset:       0,
-		requiresGrad: t.requiresGrad,
+		storage: newStorage,
+		shape:   newShape,
+		stride:  newStride,
+		offset:  0,
 	}
 }
 
@@ -158,74 +154,6 @@ func (t *Tensor) SetPool(p *Pool) {
 	t.pool = p
 }
 
-// Tape returns the tape attached to this tensor for autograd, or nil.
-func (t *Tensor) Tape() *Tape {
-	return t.tape
-}
-
-// SetTape attaches a tape to this tensor for recording operations.
-func (t *Tensor) SetTape(tape *Tape) {
-	t.tape = tape
-}
-
-// WithTape attaches a tape to this tensor and returns the tensor.
-// Useful for chaining: input.WithTape(tape).
-func (t *Tensor) WithTape(tape *Tape) *Tensor {
-	t.tape = tape
-	return t
-}
-
-// RequiresGrad returns whether this tensor participates in autograd.
-func (t *Tensor) RequiresGrad() bool {
-	return t.requiresGrad
-}
-
-// SetRequiresGrad sets whether this tensor participates in autograd.
-// When enabled, operations on this tensor will be recorded to the tape.
-func (t *Tensor) SetRequiresGrad(requires bool) {
-	t.requiresGrad = requires
-}
-
-// WithRequiresGrad sets requiresGrad and returns the tensor for chaining.
-// Example: weight := backend.RandN(768, 768).WithRequiresGrad(true).
-func (t *Tensor) WithRequiresGrad(requires bool) *Tensor {
-	t.requiresGrad = requires
-	return t
-}
-
-// Grad returns the accumulated gradient for this tensor, or nil if none.
-func (t *Tensor) Grad() *Tensor {
-	return t.grad
-}
-
-// SetGrad sets the gradient tensor.
-func (t *Tensor) SetGrad(grad *Tensor) {
-	t.grad = grad
-}
-
-// ZeroGrad clears the accumulated gradient.
-// Should be called before each training step to prevent gradient accumulation.
-func (t *Tensor) ZeroGrad() {
-	if t.grad != nil {
-		t.grad.Free()
-		t.grad = nil
-	}
-}
-
-// AccumulateGrad adds gradients to the existing gradient tensor.
-// If no gradient exists, sets the gradient directly.
-// This is used during backward pass when a tensor is used multiple times.
-func (t *Tensor) AccumulateGrad(grad *Tensor) error {
-	if t.grad == nil {
-		t.grad = grad.Clone()
-		return nil
-	}
-	// TODO: Add in-place when we have an Add that modifies in place
-	// For now, we'd need a backend reference to do the addition
-	// This will be implemented when we add the backward pass
-	return fmt.Errorf("gradient accumulation not yet implemented")
-}
-
 // String returns a string representation of the tensor metadata.
 func (t *Tensor) String() string {
 	return fmt.Sprintf("Tensor(shape=%v, stride=%v, dtype=%s, device=%s)",
@@ -250,12 +178,10 @@ func (t *Tensor) View(shape ...int) (*Tensor, error) {
 	}
 
 	return &Tensor{
-		storage:      t.storage,
-		shape:        newShape,
-		stride:       ComputeStrides(newShape),
-		offset:       t.offset,
-		tape:         t.tape,         // propagate tape (same logical data)
-		requiresGrad: t.requiresGrad, // propagate grad flag
+		storage: t.storage,
+		shape:   newShape,
+		stride:  ComputeStrides(newShape),
+		offset:  t.offset,
 	}, nil
 }
 
@@ -288,7 +214,6 @@ func (t *Tensor) Contiguous() *Tensor {
 		if t.pool != nil {
 			result.pool = t.pool
 		}
-		result.tape = t.tape // propagate tape (same logical data)
 		return result
 	}
 
@@ -312,7 +237,6 @@ func (t *Tensor) Contiguous() *Tensor {
 	if t.pool != nil {
 		newTensor.pool = t.pool
 	}
-	newTensor.tape = t.tape // propagate tape (same logical data)
 	return newTensor
 }
 

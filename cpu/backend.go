@@ -396,35 +396,31 @@ func (b *Backend) LeakyReLU(_ context.Context, t *tendo.Tensor, negativeSlope fl
 	})
 }
 
-func (b *Backend) Dropout(_ context.Context, t *tendo.Tensor, p float32, training bool) (output, mask *tendo.Tensor, err error) {
+func (b *Backend) Dropout(_ context.Context, t *tendo.Tensor, p float32, training bool) (*tendo.Tensor, error) {
 	if !training {
-		return t, nil, nil
+		return t, nil
 	}
 
 	cpu, ok := t.Storage().(tendo.CPUDataAccessor)
 	if !ok {
-		return nil, nil, &tendo.DeviceError{Expected: tendo.CPU, Got: t.Device().Type}
+		return nil, &tendo.DeviceError{Expected: tendo.CPU, Got: t.Device().Type}
 	}
 
 	data := cpu.Data()
 	numel := len(data)
 	result := make([]float32, numel)
-	maskData := make([]float32, numel)
 	scale := float32(1.0) / (1.0 - p)
 
 	for i, v := range data {
 		if rand.Float32() >= p {
 			result[i] = v * scale
-			maskData[i] = 1.0
 		} else {
 			result[i] = 0
-			maskData[i] = 0
 		}
 	}
 
 	outStorage := NewStorageFromSlice(result, t.DType())
-	maskStorage := NewStorageFromSlice(maskData, t.DType())
-	return tendo.NewTensor(outStorage, t.Shape(), nil), tendo.NewTensor(maskStorage, t.Shape(), nil), nil
+	return tendo.NewTensor(outStorage, t.Shape(), nil), nil
 }
 
 // --- NormOps ---
@@ -918,13 +914,12 @@ func (b *Backend) ConvTranspose2d(_ context.Context, input, weight *tendo.Tensor
 
 // --- PoolOps ---
 
-func (b *Backend) MaxPool2d(_ context.Context, input *tendo.Tensor, kernelSize, stride, padding [2]int) (*tendo.Tensor, []int, error) {
+func (b *Backend) MaxPool2d(_ context.Context, input *tendo.Tensor, kernelSize, stride, padding [2]int) (*tendo.Tensor, error) {
 	return b.pool2d(input, kernelSize, stride, padding, true)
 }
 
 func (b *Backend) AvgPool2d(_ context.Context, input *tendo.Tensor, kernelSize, stride, padding [2]int) (*tendo.Tensor, error) {
-	out, _, err := b.pool2d(input, kernelSize, stride, padding, false)
-	return out, err
+	return b.pool2d(input, kernelSize, stride, padding, false)
 }
 
 func (b *Backend) AdaptiveAvgPool2d(_ context.Context, input *tendo.Tensor, outputSize [2]int) (*tendo.Tensor, error) {
@@ -976,10 +971,10 @@ func (b *Backend) AdaptiveAvgPool2d(_ context.Context, input *tendo.Tensor, outp
 	return tendo.NewTensor(storage, []int{N, C, outH, outW}, nil), nil
 }
 
-func (b *Backend) AdaptiveMaxPool2d(_ context.Context, input *tendo.Tensor, outputSize [2]int) (*tendo.Tensor, []int, error) {
+func (b *Backend) AdaptiveMaxPool2d(_ context.Context, input *tendo.Tensor, outputSize [2]int) (*tendo.Tensor, error) {
 	inShape := input.Shape()
 	if len(inShape) != 4 {
-		return nil, nil, &tendo.ShapeError{Op: "adaptivemaxpool2d", Message: "input must be 4D [N, C, H, W]"}
+		return nil, &tendo.ShapeError{Op: "adaptivemaxpool2d", Message: "input must be 4D [N, C, H, W]"}
 	}
 
 	N, C, inH, inW := inShape[0], inShape[1], inShape[2], inShape[3]
@@ -988,7 +983,6 @@ func (b *Backend) AdaptiveMaxPool2d(_ context.Context, input *tendo.Tensor, outp
 	cpu, _ := input.Storage().(tendo.CPUDataAccessor)
 	data := cpu.Data()
 	result := make([]float32, N*C*outH*outW)
-	indices := make([]int, N*C*outH*outW)
 
 	for n := 0; n < N; n++ {
 		for c := 0; c < C; c++ {
@@ -1008,27 +1002,24 @@ func (b *Backend) AdaptiveMaxPool2d(_ context.Context, input *tendo.Tensor, outp
 
 					// Max pool over this region
 					maxVal := data[n*C*inH*inW+c*inH*inW+ihStart*inW+iwStart]
-					maxIdx := ihStart*inW + iwStart
 					for ih := ihStart; ih < ihEnd; ih++ {
 						for iw := iwStart; iw < iwEnd; iw++ {
 							val := data[n*C*inH*inW+c*inH*inW+ih*inW+iw]
 							if val > maxVal {
 								maxVal = val
-								maxIdx = ih*inW + iw
 							}
 						}
 					}
 
 					outIdx := n*C*outH*outW + c*outH*outW + oh*outW + ow
 					result[outIdx] = maxVal
-					indices[outIdx] = maxIdx
 				}
 			}
 		}
 	}
 
 	storage := NewStorageFromSlice(result, input.DType())
-	return tendo.NewTensor(storage, []int{N, C, outH, outW}, nil), indices, nil
+	return tendo.NewTensor(storage, []int{N, C, outH, outW}, nil), nil
 }
 
 // --- LossOps ---
@@ -1805,7 +1796,7 @@ func (b *Backend) computeVariance(t *tendo.Tensor, dims []int, keepdim bool, cor
 	return tendo.NewTensor(storage, outShape, nil), nil
 }
 
-func (b *Backend) pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int, maxPool bool) (*tendo.Tensor, []int, error) {
+func (b *Backend) pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int, maxPool bool) (*tendo.Tensor, error) {
 	inShape := input.Shape()
 
 	// Support both 3D [C, H, W] and 4D [N, C, H, W] input
@@ -1817,7 +1808,7 @@ func (b *Backend) pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int
 	} else if len(inShape) == 4 {
 		N, C, inH, inW = inShape[0], inShape[1], inShape[2], inShape[3]
 	} else {
-		return nil, nil, &tendo.ShapeError{Op: "pool2d", Message: "input must be 3D [C, H, W] or 4D [N, C, H, W]"}
+		return nil, &tendo.ShapeError{Op: "pool2d", Message: "input must be 3D [C, H, W] or 4D [N, C, H, W]"}
 	}
 
 	outH := (inH+2*padding[0]-kernelSize[0])/stride[0] + 1
@@ -1880,7 +1871,7 @@ func (b *Backend) pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int
 		outShape = []int{N, C, outH, outW}
 	}
 
-	return tendo.NewTensor(storage, outShape, nil), nil, nil
+	return tendo.NewTensor(storage, outShape, nil), nil
 }
 
 // Helper functions

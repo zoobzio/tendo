@@ -117,10 +117,9 @@ type ActivationOps interface {
 	Softmax(ctx context.Context, t *Tensor, dim int) (*Tensor, error)
 	LogSoftmax(ctx context.Context, t *Tensor, dim int) (*Tensor, error)
 	LeakyReLU(ctx context.Context, t *Tensor, negativeSlope float32) (*Tensor, error)
-	// Dropout applies dropout and returns (output, mask).
-	// During inference (training=false), mask is nil and output equals input.
-	// The mask is needed for the backward pass.
-	Dropout(ctx context.Context, t *Tensor, p float32, training bool) (output, mask *Tensor, err error)
+	// Dropout randomly zeros elements with probability p during training.
+	// During inference (training=false), returns input unchanged.
+	Dropout(ctx context.Context, t *Tensor, p float32, training bool) (*Tensor, error)
 }
 
 // NormOps defines normalization operations.
@@ -140,10 +139,10 @@ type ConvOps interface {
 
 // PoolOps defines pooling operations.
 type PoolOps interface {
-	MaxPool2d(ctx context.Context, input *Tensor, kernelSize, stride, padding [2]int) (*Tensor, []int, error)
+	MaxPool2d(ctx context.Context, input *Tensor, kernelSize, stride, padding [2]int) (*Tensor, error)
 	AvgPool2d(ctx context.Context, input *Tensor, kernelSize, stride, padding [2]int) (*Tensor, error)
 	AdaptiveAvgPool2d(ctx context.Context, input *Tensor, outputSize [2]int) (*Tensor, error)
-	AdaptiveMaxPool2d(ctx context.Context, input *Tensor, outputSize [2]int) (*Tensor, []int, error)
+	AdaptiveMaxPool2d(ctx context.Context, input *Tensor, outputSize [2]int) (*Tensor, error)
 }
 
 // LossOps defines loss functions.
@@ -181,14 +180,6 @@ type ShapeOps interface {
 
 	// Stack stacks tensors along a new dimension.
 	Stack(ctx context.Context, tensors []*Tensor, dim int) (*Tensor, error)
-}
-
-// OptimizerOps defines optimizer operations.
-type OptimizerOps interface {
-	// AdamW performs a fused AdamW optimizer step.
-	// Updates param, m, v tensors in-place.
-	// biasCorrection1 = 1 - beta1^step, biasCorrection2 = 1 - beta2^step
-	AdamW(ctx context.Context, param, grad, m, v *Tensor, lr, beta1, beta2, epsilon, weightDecay, biasCorrection1, biasCorrection2 float32) error
 }
 
 // CoreBackend is the minimal interface required by all backends.
