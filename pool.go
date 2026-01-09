@@ -2,398 +2,225 @@ package tendo
 
 import (
 	"context"
-	"sync"
+	"fmt"
 
-	"github.com/zoobzio/capitan"
+	"github.com/zoobzio/pipz"
 )
 
-// PoolAllocator is the interface for backend-specific pool allocation.
-// Each backend (CPU, CUDA, etc.) implements this interface to provide
-// memory pooling for its device type.
-type PoolAllocator interface {
-	// Alloc allocates storage of the given size and dtype.
-	Alloc(numel int, dtype DType) (Storage, error)
-
-	// Free returns storage to the pool.
-	Free(s Storage)
-
-	// Clear releases all cached memory.
-	Clear()
+// Pool2dConfig configures 2D pooling operations.
+type Pool2dConfig struct {
+	KernelSize [2]int // [height, width]
+	Stride     [2]int // [height, width] - defaults to KernelSize if zero
+	Padding    [2]int // [height, width]
 }
 
-// Pool manages memory allocation and reuse for tensor storage.
-// It maintains separate pools for CPU and each CUDA device.
-type Pool struct {
-	emitCtx       context.Context
-	cpu           *cpuPool
-	cuda          map[int]*cudaPool
-	stats         PoolStats
-	mu            sync.Mutex
-	maxCacheBytes int64
+// MaxPool2d is a chainable operator that applies 2D max pooling.
+// Input shape: [N, C, H, W] or [C, H, W]
+// Output shape: [N, C, H', W'] or [C, H', W'] where:
+//
+//	H' = (H + 2*padding[0] - kernel[0]) / stride[0] + 1
+//	W' = (W + 2*padding[1] - kernel[1]) / stride[1] + 1
+type MaxPool2d struct { //nolint:govet // field alignment is less important than readability
+	backend  PoolOps
+	config   Pool2dConfig
+	identity pipz.Identity
 }
 
-// PoolStats tracks memory pool statistics.
-type PoolStats struct {
-	CUDAAllocations   map[int]int64
-	CUDADeallocations map[int]int64
-	CUDABytesInUse    map[int]int64
-	CUDABytesCached   map[int]int64
-	CPUAllocations    int64
-	CPUDeallocations  int64
-	CPUBytesInUse     int64
-	CPUBytesCached    int64
-}
-
-// cpuPool manages CPU memory blocks.
-type cpuPool struct {
-	// blocks maps size class to available blocks
-	// Size classes are powers of 2 for simplicity
-	blocks map[int][]Storage
-}
-
-// cudaPool manages CUDA memory blocks for a single device.
-type cudaPool struct {
-	blocks map[int][]uintptr
-	device int
-}
-
-// NewPool creates a new memory pool.
-func NewPool() *Pool {
-	return &Pool{
-		cpu: &cpuPool{
-			blocks: make(map[int][]Storage),
-		},
-		cuda: make(map[int]*cudaPool),
-		stats: PoolStats{
-			CUDAAllocations:   make(map[int]int64),
-			CUDADeallocations: make(map[int]int64),
-			CUDABytesInUse:    make(map[int]int64),
-			CUDABytesCached:   make(map[int]int64),
-		},
+// NewMaxPool2d creates a MaxPool2d operator.
+func NewMaxPool2d(backend PoolOps, config Pool2dConfig) *MaxPool2d {
+	return &MaxPool2d{
+		identity: IdentityMaxPool2d,
+		backend:  backend,
+		config:   config,
 	}
 }
 
-// SetContext sets the context used for emitting pool events.
-func (p *Pool) SetContext(ctx context.Context) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.emitCtx = ctx
-}
-
-// SetMaxCacheSize sets the maximum bytes to cache before eviction.
-// Set to 0 for unlimited (default). When the cache exceeds this limit,
-// oldest blocks are evicted until under the limit.
-func (p *Pool) SetMaxCacheSize(bytes int64) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.maxCacheBytes = bytes
-	if bytes > 0 {
-		p.evictIfNeeded()
+// Process applies 2D max pooling.
+func (m *MaxPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	// Default stride to kernel size
+	stride := m.config.Stride
+	if stride[0] == 0 {
+		stride[0] = m.config.KernelSize[0]
 	}
-}
-
-// MaxCacheSize returns the current maximum cache size (0 = unlimited).
-func (p *Pool) MaxCacheSize() int64 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.maxCacheBytes
-}
-
-// totalCachedBytes returns total cached bytes (CPU + all CUDA devices).
-// Caller must hold the mutex.
-func (p *Pool) totalCachedBytes() int64 {
-	total := p.stats.CPUBytesCached
-	for _, bytes := range p.stats.CUDABytesCached {
-		total += bytes
-	}
-	return total
-}
-
-// evictIfNeeded evicts cached blocks if over the limit.
-// Caller must hold the mutex.
-func (p *Pool) evictIfNeeded() {
-	if p.maxCacheBytes <= 0 {
-		return
+	if stride[1] == 0 {
+		stride[1] = m.config.KernelSize[1]
 	}
 
-	// Evict CPU blocks first (FIFO from smallest size class)
-	for p.totalCachedBytes() > p.maxCacheBytes && p.stats.CPUBytesCached > 0 {
-		evicted := false
-		for sizeClass, blocks := range p.cpu.blocks {
-			if len(blocks) > 0 {
-				// Remove oldest block (first in slice)
-				block := blocks[0]
-				p.cpu.blocks[sizeClass] = blocks[1:]
-				p.stats.CPUBytesCached -= int64(block.Size())
-				evicted = true
-				break
-			}
-		}
-		if !evicted {
-			break
-		}
-	}
-
-	// Then evict CUDA blocks if still over limit
-	alloc, hasAlloc := GetMemoryAllocator(CUDA)
-	for p.totalCachedBytes() > p.maxCacheBytes {
-		evicted := false
-		for device, pool := range p.cuda {
-			for sizeClass, blocks := range pool.blocks {
-				if len(blocks) > 0 {
-					ptr := blocks[0]
-					pool.blocks[sizeClass] = blocks[1:]
-					if hasAlloc {
-						_ = alloc.Free(ptr) //nolint:errcheck // Best-effort eviction, no recovery possible
-					}
-					// Estimate bytes freed (sizeClass * 4 for float32)
-					p.stats.CUDABytesCached[device] -= int64(sizeClass * 4)
-					evicted = true
-					break
-				}
-			}
-			if evicted {
-				break
-			}
-		}
-		if !evicted {
-			break
-		}
-	}
-}
-
-// AllocCPU allocates or retrieves a CPU storage of the given size.
-func (p *Pool) AllocCPU(numel int, dtype DType) *CPUStorage {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	sizeClass := roundUpPow2(numel)
-
-	// Check for cached block with matching dtype
-	if blocks, ok := p.cpu.blocks[sizeClass]; ok && len(blocks) > 0 {
-		// Search for a block with matching dtype
-		for i := len(blocks) - 1; i >= 0; i-- {
-			if cpu, ok := blocks[i].(*CPUStorage); ok {
-				if cpu.Len() >= numel && cpu.DType() == dtype {
-					// Remove from pool
-					p.cpu.blocks[sizeClass] = append(blocks[:i], blocks[i+1:]...)
-					p.stats.CPUBytesCached -= int64(cpu.Size())
-					p.stats.CPUBytesInUse += int64(numel * dtypeSize(dtype))
-					return cpu
-				}
-			}
-		}
-	}
-
-	// Allocate new
-	storage := NewCPUStorage(numel, dtype)
-	p.stats.CPUAllocations++
-	p.stats.CPUBytesInUse += int64(storage.Size())
-
-	if p.emitCtx != nil {
-		capitan.Emit(p.emitCtx, PoolAlloc,
-			KeyBytes.Field(storage.Size()),
-			KeyDevice.Field(Device{Type: CPU}),
-		)
-	}
-
-	return storage
-}
-
-// FreeCPU returns a CPU storage to the pool for reuse.
-func (p *Pool) FreeCPU(storage *CPUStorage) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	sizeClass := roundUpPow2(storage.Len())
-	p.cpu.blocks[sizeClass] = append(p.cpu.blocks[sizeClass], storage)
-
-	p.stats.CPUDeallocations++
-	p.stats.CPUBytesInUse -= int64(storage.Size())
-	p.stats.CPUBytesCached += int64(storage.Size())
-
-	if p.emitCtx != nil {
-		capitan.Emit(p.emitCtx, PoolFree,
-			KeyBytes.Field(storage.Size()),
-			KeyDevice.Field(Device{Type: CPU}),
-		)
-	}
-
-	// Evict if over cache limit
-	p.evictIfNeeded()
-}
-
-// AllocCUDA allocates or retrieves CUDA memory of the given size.
-// Returns the device pointer and an error if CUDA is unavailable.
-func (p *Pool) AllocCUDA(numel int, dtype DType, device int) (uintptr, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Ensure device pool exists
-	if _, ok := p.cuda[device]; !ok {
-		p.cuda[device] = &cudaPool{
-			device: device,
-			blocks: make(map[int][]uintptr),
-		}
-	}
-
-	elemSize := dtypeSize(dtype)
-	sizeClass := roundUpPow2(numel)
-	pool := p.cuda[device]
-
-	// Check for cached block
-	if blocks, ok := pool.blocks[sizeClass]; ok && len(blocks) > 0 {
-		ptr := blocks[len(blocks)-1]
-		pool.blocks[sizeClass] = blocks[:len(blocks)-1]
-
-		p.stats.CUDABytesCached[device] -= int64(sizeClass * elemSize)
-		p.stats.CUDABytesInUse[device] += int64(numel * elemSize)
-		return ptr, nil
-	}
-
-	// Allocate new via CUDA backend
-	alloc, ok := GetMemoryAllocator(CUDA)
-	if !ok {
-		return 0, ErrNoBackend
-	}
-	ptr, err := alloc.Malloc(sizeClass * elemSize)
+	result, err := m.backend.MaxPool2d(ctx, t, m.config.KernelSize, stride, m.config.Padding)
 	if err != nil {
-		return 0, err
+		return nil, fmt.Errorf("maxpool2d: %w", err)
 	}
 
-	p.stats.CUDAAllocations[device]++
-	p.stats.CUDABytesInUse[device] += int64(numel * elemSize)
+	emitWithTrace(ctx, OpMaxPool2d,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyKernelSize.Field(m.config.KernelSize),
+		KeyPoolStride.Field(stride),
+		KeyPadding.Field(m.config.Padding),
+	)
 
-	if p.emitCtx != nil {
-		capitan.Emit(p.emitCtx, PoolAlloc,
-			KeyBytes.Field(numel*elemSize),
-			KeyDevice.Field(Device{Type: CUDA, Index: device}),
-		)
-	}
-
-	return ptr, nil
+	return result, nil
 }
 
-// FreeCUDA returns CUDA memory to the pool for reuse.
-func (p *Pool) FreeCUDA(ptr uintptr, numel int, dtype DType, device int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// Identity returns the operator identity.
+func (m *MaxPool2d) Identity() pipz.Identity { return m.identity }
 
-	if _, ok := p.cuda[device]; !ok {
-		p.cuda[device] = &cudaPool{
-			device: device,
-			blocks: make(map[int][]uintptr),
-		}
-	}
+// Schema returns the operator schema node.
+func (m *MaxPool2d) Schema() pipz.Node { return pipz.Node{Identity: m.identity, Type: "operator"} }
 
-	elemSize := dtypeSize(dtype)
-	sizeClass := roundUpPow2(numel)
-	pool := p.cuda[device]
-	pool.blocks[sizeClass] = append(pool.blocks[sizeClass], ptr)
+// Close releases any resources held by this operator.
+func (m *MaxPool2d) Close() error { return nil }
 
-	p.stats.CUDADeallocations[device]++
-	p.stats.CUDABytesInUse[device] -= int64(numel * elemSize)
-	p.stats.CUDABytesCached[device] += int64(sizeClass * elemSize)
+var _ pipz.Chainable[*Tensor] = (*MaxPool2d)(nil)
 
-	if p.emitCtx != nil {
-		capitan.Emit(p.emitCtx, PoolFree,
-			KeyBytes.Field(numel*elemSize),
-			KeyDevice.Field(Device{Type: CUDA, Index: device}),
-		)
-	}
-
-	// Evict if over cache limit
-	p.evictIfNeeded()
+// AvgPool2d is a chainable operator that applies 2D average pooling.
+// Input shape: [N, C, H, W] or [C, H, W]
+// Output shape: [N, C, H', W'] or [C, H', W'].
+type AvgPool2d struct { //nolint:govet // field alignment is less important than readability
+	backend  PoolOps
+	config   Pool2dConfig
+	identity pipz.Identity
 }
 
-// Clear releases all cached memory back to the system.
-func (p *Pool) Clear() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Clear CPU cache (Go GC will handle it)
-	p.cpu.blocks = make(map[int][]Storage)
-	p.stats.CPUBytesCached = 0
-
-	// Clear CUDA caches
-	alloc, hasAlloc := GetMemoryAllocator(CUDA)
-	for device, pool := range p.cuda {
-		for _, blocks := range pool.blocks {
-			for _, ptr := range blocks {
-				if hasAlloc {
-					_ = alloc.Free(ptr) //nolint:errcheck // Best-effort cleanup, no recovery possible
-				}
-			}
-		}
-		pool.blocks = make(map[int][]uintptr)
-		p.stats.CUDABytesCached[device] = 0
+// NewAvgPool2d creates an AvgPool2d operator.
+func NewAvgPool2d(backend PoolOps, config Pool2dConfig) *AvgPool2d {
+	return &AvgPool2d{
+		identity: IdentityAvgPool2d,
+		backend:  backend,
+		config:   config,
 	}
 }
 
-// Stats returns current pool statistics.
-func (p *Pool) Stats() PoolStats {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// Process applies 2D average pooling.
+func (a *AvgPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	// Default stride to kernel size
+	stride := a.config.Stride
+	if stride[0] == 0 {
+		stride[0] = a.config.KernelSize[0]
+	}
+	if stride[1] == 0 {
+		stride[1] = a.config.KernelSize[1]
+	}
 
-	// Copy maps to avoid race
-	stats := p.stats
-	stats.CUDAAllocations = make(map[int]int64)
-	stats.CUDADeallocations = make(map[int]int64)
-	stats.CUDABytesInUse = make(map[int]int64)
-	stats.CUDABytesCached = make(map[int]int64)
-	for k, v := range p.stats.CUDAAllocations {
-		stats.CUDAAllocations[k] = v
+	result, err := a.backend.AvgPool2d(ctx, t, a.config.KernelSize, stride, a.config.Padding)
+	if err != nil {
+		return nil, fmt.Errorf("avgpool2d: %w", err)
 	}
-	for k, v := range p.stats.CUDADeallocations {
-		stats.CUDADeallocations[k] = v
-	}
-	for k, v := range p.stats.CUDABytesInUse {
-		stats.CUDABytesInUse[k] = v
-	}
-	for k, v := range p.stats.CUDABytesCached {
-		stats.CUDABytesCached[k] = v
-	}
-	return stats
+
+	emitWithTrace(ctx, OpAvgPool2d,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyKernelSize.Field(a.config.KernelSize),
+		KeyPoolStride.Field(stride),
+		KeyPadding.Field(a.config.Padding),
+	)
+
+
+	return result, nil
 }
 
-// roundUpPow2 rounds n up to the next power of 2.
-func roundUpPow2(n int) int {
-	if n <= 0 {
-		return 1
+// Identity returns the operator identity.
+func (a *AvgPool2d) Identity() pipz.Identity { return a.identity }
+
+// Schema returns the operator schema node.
+func (a *AvgPool2d) Schema() pipz.Node { return pipz.Node{Identity: a.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (a *AvgPool2d) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*AvgPool2d)(nil)
+
+// AdaptiveAvgPool2d is a chainable operator that applies adaptive 2D average pooling.
+// The output has a fixed spatial size regardless of input size.
+// Input shape: [N, C, H, W] or [C, H, W].
+type AdaptiveAvgPool2d struct { //nolint:govet // field alignment is less important than readability
+	backend    PoolOps
+	outputSize [2]int
+	identity   pipz.Identity
+}
+
+// NewAdaptiveAvgPool2d creates an AdaptiveAvgPool2d operator.
+func NewAdaptiveAvgPool2d(backend PoolOps, outputSize [2]int) *AdaptiveAvgPool2d {
+	return &AdaptiveAvgPool2d{
+		identity:   IdentityAdaptiveAvgPool2d,
+		backend:    backend,
+		outputSize: outputSize,
 	}
-	n--
-	n |= n >> 1
-	n |= n >> 2
-	n |= n >> 4
-	n |= n >> 8
-	n |= n >> 16
-	n++
-	return n
 }
 
-// dtypeSize returns the size in bytes for a dtype.
-func dtypeSize(dtype DType) int {
-	switch dtype {
-	case Float32:
-		return 4
-	case Float16, BFloat16:
-		return 2
-	case Int64:
-		return 8
-	default:
-		return 4
+// Process applies adaptive average pooling.
+func (a *AdaptiveAvgPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	result, err := a.backend.AdaptiveAvgPool2d(ctx, t, a.outputSize)
+	if err != nil {
+		return nil, fmt.Errorf("adaptiveavgpool2d: %w", err)
+	}
+
+	emitWithTrace(ctx, OpAdaptiveAvgPool2d,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyOutputSize.Field(a.outputSize),
+	)
+
+
+	return result, nil
+}
+
+// Identity returns the operator identity.
+func (a *AdaptiveAvgPool2d) Identity() pipz.Identity { return a.identity }
+
+// Schema returns the operator schema node.
+func (a *AdaptiveAvgPool2d) Schema() pipz.Node {
+	return pipz.Node{Identity: a.identity, Type: "operator"}
+}
+
+// Close releases any resources held by this operator.
+func (a *AdaptiveAvgPool2d) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*AdaptiveAvgPool2d)(nil)
+
+// AdaptiveMaxPool2d is a chainable operator that applies adaptive 2D max pooling.
+// The output has a fixed spatial size regardless of input size.
+// Input shape: [N, C, H, W] or [C, H, W].
+type AdaptiveMaxPool2d struct { //nolint:govet // field alignment is less important than readability
+	backend    PoolOps
+	outputSize [2]int
+	identity   pipz.Identity
+}
+
+// NewAdaptiveMaxPool2d creates an AdaptiveMaxPool2d operator.
+func NewAdaptiveMaxPool2d(backend PoolOps, outputSize [2]int) *AdaptiveMaxPool2d {
+	return &AdaptiveMaxPool2d{
+		identity:   IdentityAdaptiveMaxPool2d,
+		backend:    backend,
+		outputSize: outputSize,
 	}
 }
 
-// Default pool instance.
-var defaultPool = NewPool()
+// Process applies adaptive max pooling.
+func (a *AdaptiveMaxPool2d) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	result, err := a.backend.AdaptiveMaxPool2d(ctx, t, a.outputSize)
+	if err != nil {
+		return nil, fmt.Errorf("adaptivemaxpool2d: %w", err)
+	}
 
-// DefaultPool returns the default memory pool.
-func DefaultPool() *Pool {
-	return defaultPool
+	emitWithTrace(ctx, OpAdaptiveMaxPool2d,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyOutputSize.Field(a.outputSize),
+	)
+
+	return result, nil
 }
 
-// SetDefaultPool sets the default memory pool.
-func SetDefaultPool(p *Pool) {
-	defaultPool = p
+// Identity returns the operator identity.
+func (a *AdaptiveMaxPool2d) Identity() pipz.Identity { return a.identity }
+
+// Schema returns the operator schema node.
+func (a *AdaptiveMaxPool2d) Schema() pipz.Node {
+	return pipz.Node{Identity: a.identity, Type: "operator"}
 }
+
+// Close releases any resources held by this operator.
+func (a *AdaptiveMaxPool2d) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*AdaptiveMaxPool2d)(nil)

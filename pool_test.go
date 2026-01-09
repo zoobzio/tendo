@@ -1,151 +1,278 @@
-package tendo
+package tendo_test
 
 import (
+	"context"
 	"testing"
+
+	"github.com/zoobzio/tendo"
+	"github.com/zoobzio/tendo/cpu"
 )
 
-func TestPoolBasic(t *testing.T) {
-	t.Run("NewPool", func(t *testing.T) {
-		p := NewPool()
-		if p == nil {
-			t.Fatal("NewPool returned nil")
+func TestMaxPool2d(t *testing.T) {
+	ctx := context.Background()
+	backend := cpu.NewBackend()
+
+	t.Run("MaxPool2d basic", func(t *testing.T) {
+		// Input: [1, 1, 4, 4]
+		data := []float32{
+			1, 2, 3, 4,
+			5, 6, 7, 8,
+			9, 10, 11, 12,
+			13, 14, 15, 16,
 		}
-		if p.MaxCacheSize() != 0 {
-			t.Errorf("expected default max cache size 0, got %d", p.MaxCacheSize())
+		input := tendo.MustFromSlice(data, 1, 1, 4, 4)
+
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
+			Stride:     [2]int{2, 2},
+		}
+
+		result, err := tendo.NewMaxPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Expected output shape: [1, 1, 2, 2]
+		expectedShape := []int{1, 1, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
+		}
+
+		// Expected values: max of each 2x2 region
+		// Top-left 2x2: max(1,2,5,6) = 6
+		// Top-right 2x2: max(3,4,7,8) = 8
+		// Bottom-left 2x2: max(9,10,13,14) = 14
+		// Bottom-right 2x2: max(11,12,15,16) = 16
+		expected := []float32{6, 8, 14, 16}
+		resultData := result.MustData()
+		for i, v := range expected {
+			if resultData[i] != v {
+				t.Errorf("at index %d: expected %v, got %v", i, v, resultData[i])
+			}
 		}
 	})
 
-	t.Run("AllocCPU and FreeCPU", func(t *testing.T) {
-		p := NewPool()
-
-		// Allocate
-		storage := p.AllocCPU(100, Float32)
-		if storage == nil {
-			t.Fatal("AllocCPU returned nil")
+	t.Run("MaxPool2d with stride 1", func(t *testing.T) {
+		// Input: [1, 1, 3, 3]
+		data := []float32{
+			1, 2, 3,
+			4, 5, 6,
+			7, 8, 9,
 		}
-		if storage.Len() != 100 {
-			t.Errorf("expected len 100, got %d", storage.Len())
-		}
+		input := tendo.MustFromSlice(data, 1, 1, 3, 3)
 
-		stats := p.Stats()
-		if stats.CPUAllocations != 1 {
-			t.Errorf("expected 1 allocation, got %d", stats.CPUAllocations)
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
+			Stride:     [2]int{1, 1},
 		}
 
-		// Free back to pool
-		p.FreeCPU(storage)
-
-		stats = p.Stats()
-		if stats.CPUDeallocations != 1 {
-			t.Errorf("expected 1 deallocation, got %d", stats.CPUDeallocations)
-		}
-		if stats.CPUBytesCached <= 0 {
-			t.Error("expected cached bytes > 0")
+		result, err := tendo.NewMaxPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Reallocate should reuse
-		storage2 := p.AllocCPU(100, Float32)
-		if storage2 == nil {
-			t.Fatal("second AllocCPU returned nil")
+		// Expected output shape: [1, 1, 2, 2]
+		expectedShape := []int{1, 1, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
 		}
 
-		stats = p.Stats()
-		// Should still be 1 allocation since we reused from cache
-		if stats.CPUAllocations != 1 {
-			t.Errorf("expected 1 allocation (reuse), got %d", stats.CPUAllocations)
+		// Expected values:
+		// Position (0,0): max(1,2,4,5) = 5
+		// Position (0,1): max(2,3,5,6) = 6
+		// Position (1,0): max(4,5,7,8) = 8
+		// Position (1,1): max(5,6,8,9) = 9
+		expected := []float32{5, 6, 8, 9}
+		resultData := result.MustData()
+		for i, v := range expected {
+			if resultData[i] != v {
+				t.Errorf("at index %d: expected %v, got %v", i, v, resultData[i])
+			}
+		}
+	})
+
+	t.Run("MaxPool2d 3D input", func(t *testing.T) {
+		// Input: [1, 4, 4] (no batch dimension)
+		data := []float32{
+			1, 2, 3, 4,
+			5, 6, 7, 8,
+			9, 10, 11, 12,
+			13, 14, 15, 16,
+		}
+		input := tendo.MustFromSlice(data, 1, 4, 4)
+
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
+		}
+
+		result, err := tendo.NewMaxPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Expected output shape: [1, 2, 2] (no batch)
+		expectedShape := []int{1, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
+		}
+	})
+
+	t.Run("MaxPool2d with padding", func(t *testing.T) {
+		// Input: [1, 1, 2, 2]
+		data := []float32{1, 2, 3, 4}
+		input := tendo.MustFromSlice(data, 1, 1, 2, 2)
+
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
+			Stride:     [2]int{2, 2},
+			Padding:    [2]int{1, 1},
+		}
+
+		result, err := tendo.NewMaxPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// With padding=1, kernel=2, stride=2 on 2x2 input:
+		// padded input is 4x4 with zeros around
+		// Output shape: ((2+2-2)/2+1) x ((2+2-2)/2+1) = 2x2
+		expectedShape := []int{1, 1, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
+		}
+	})
+
+	t.Run("MaxPool2d multi-channel", func(t *testing.T) {
+		// Input: [1, 2, 4, 4] - 2 channels
+		data := make([]float32, 32)
+		for i := range data {
+			data[i] = float32(i + 1)
+		}
+		input := tendo.MustFromSlice(data, 1, 2, 4, 4)
+
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
+			Stride:     [2]int{2, 2},
+		}
+
+		result, err := tendo.NewMaxPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		expectedShape := []int{1, 2, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
 		}
 	})
 }
 
-func TestPoolEviction(t *testing.T) {
-	t.Run("SetMaxCacheSize", func(t *testing.T) {
-		p := NewPool()
-		p.SetMaxCacheSize(1000)
-		if p.MaxCacheSize() != 1000 {
-			t.Errorf("expected max cache size 1000, got %d", p.MaxCacheSize())
+func TestAvgPool2d(t *testing.T) {
+	ctx := context.Background()
+	backend := cpu.NewBackend()
+
+	t.Run("AvgPool2d basic", func(t *testing.T) {
+		// Input: [1, 1, 4, 4]
+		data := []float32{
+			1, 2, 3, 4,
+			5, 6, 7, 8,
+			9, 10, 11, 12,
+			13, 14, 15, 16,
+		}
+		input := tendo.MustFromSlice(data, 1, 1, 4, 4)
+
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
+			Stride:     [2]int{2, 2},
+		}
+
+		result, err := tendo.NewAvgPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Expected output shape: [1, 1, 2, 2]
+		expectedShape := []int{1, 1, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
+		}
+
+		// Expected values: avg of each 2x2 region
+		// Top-left 2x2: avg(1,2,5,6) = 3.5
+		// Top-right 2x2: avg(3,4,7,8) = 5.5
+		// Bottom-left 2x2: avg(9,10,13,14) = 11.5
+		// Bottom-right 2x2: avg(11,12,15,16) = 13.5
+		expected := []float32{3.5, 5.5, 11.5, 13.5}
+		resultData := result.MustData()
+		for i, v := range expected {
+			if resultData[i] != v {
+				t.Errorf("at index %d: expected %v, got %v", i, v, resultData[i])
+			}
 		}
 	})
 
-	t.Run("Eviction on limit", func(t *testing.T) {
-		p := NewPool()
+	t.Run("AvgPool2d with stride 1", func(t *testing.T) {
+		// Input: [1, 1, 3, 3]
+		data := []float32{
+			1, 2, 3,
+			4, 5, 6,
+			7, 8, 9,
+		}
+		input := tendo.MustFromSlice(data, 1, 1, 3, 3)
 
-		// Allocate and free several blocks
-		for i := 0; i < 10; i++ {
-			storage := p.AllocCPU(100, Float32) // 400 bytes each
-			p.FreeCPU(storage)
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
+			Stride:     [2]int{1, 1},
 		}
 
-		stats := p.Stats()
-		cachedBefore := stats.CPUBytesCached
-		if cachedBefore == 0 {
-			t.Fatal("expected some cached bytes before setting limit")
+		result, err := tendo.NewAvgPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Set a small limit - should trigger eviction
-		p.SetMaxCacheSize(500)
-
-		stats = p.Stats()
-		cachedAfter := stats.CPUBytesCached
-		if cachedAfter > 500 {
-			t.Errorf("expected cached bytes <= 500 after eviction, got %d", cachedAfter)
-		}
-	})
-
-	t.Run("Eviction on FreeCPU", func(t *testing.T) {
-		p := NewPool()
-		p.SetMaxCacheSize(500) // Set limit first
-
-		// Allocate and free - should evict to stay under limit
-		for i := 0; i < 10; i++ {
-			storage := p.AllocCPU(100, Float32) // 400 bytes each, rounded to 512
-			p.FreeCPU(storage)
+		// Expected output shape: [1, 1, 2, 2]
+		expectedShape := []int{1, 1, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
 		}
 
-		stats := p.Stats()
-		if stats.CPUBytesCached > 500 {
-			t.Errorf("expected cached bytes <= 500, got %d", stats.CPUBytesCached)
+		// Expected values:
+		// Position (0,0): avg(1,2,4,5) = 3
+		// Position (0,1): avg(2,3,5,6) = 4
+		// Position (1,0): avg(4,5,7,8) = 6
+		// Position (1,1): avg(5,6,8,9) = 7
+		expected := []float32{3, 4, 6, 7}
+		resultData := result.MustData()
+		for i, v := range expected {
+			if resultData[i] != v {
+				t.Errorf("at index %d: expected %v, got %v", i, v, resultData[i])
+			}
 		}
 	})
 
-	t.Run("Unlimited cache (0)", func(t *testing.T) {
-		p := NewPool()
-		p.SetMaxCacheSize(0) // Unlimited
+	t.Run("AvgPool2d 3D input", func(t *testing.T) {
+		// Input: [1, 4, 4] (no batch dimension)
+		data := []float32{
+			1, 2, 3, 4,
+			5, 6, 7, 8,
+			9, 10, 11, 12,
+			13, 14, 15, 16,
+		}
+		input := tendo.MustFromSlice(data, 1, 4, 4)
 
-		// Allocate and free many blocks
-		for i := 0; i < 100; i++ {
-			storage := p.AllocCPU(100, Float32)
-			p.FreeCPU(storage)
+		config := tendo.Pool2dConfig{
+			KernelSize: [2]int{2, 2},
 		}
 
-		stats := p.Stats()
-		// With unlimited, nothing should be evicted
-		if stats.CPUBytesCached == 0 {
-			t.Error("expected cached bytes > 0 with unlimited cache")
-		}
-	})
-}
-
-func TestPoolClear(t *testing.T) {
-	t.Run("Clear releases cache", func(t *testing.T) {
-		p := NewPool()
-
-		// Fill cache
-		for i := 0; i < 10; i++ {
-			storage := p.AllocCPU(100, Float32)
-			p.FreeCPU(storage)
+		result, err := tendo.NewAvgPool2d(backend, config).Process(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 
-		stats := p.Stats()
-		if stats.CPUBytesCached == 0 {
-			t.Fatal("expected cached bytes > 0 before clear")
-		}
-
-		// Clear
-		p.Clear()
-
-		stats = p.Stats()
-		if stats.CPUBytesCached != 0 {
-			t.Errorf("expected 0 cached bytes after clear, got %d", stats.CPUBytesCached)
+		// Expected output shape: [1, 2, 2] (no batch)
+		expectedShape := []int{1, 2, 2}
+		if !shapesEqual(result.Shape(), expectedShape) {
+			t.Errorf("expected shape %v, got %v", expectedShape, result.Shape())
 		}
 	})
 }

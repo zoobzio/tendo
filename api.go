@@ -1,3 +1,77 @@
+// Package tendo provides a composable tensor library for Go with GPU acceleration.
+//
+// # Overview
+//
+// Tendo provides building blocks for neural network operations through a
+// pipeline-based architecture. It integrates with pipz for operation composition
+// and capitan for observability.
+//
+// # Core Types
+//
+// The primary types are:
+//
+//   - [Tensor]: Multi-dimensional array with shape, stride, and device information
+//   - [Storage]: Interface for memory backends (CPU, CUDA)
+//   - [Device]: Represents a compute device (CPU or GPU)
+//   - [DType]: Data type of tensor elements (Float32, Float16, BFloat16, Int64)
+//   - [Pool]: Memory pool for efficient allocation reuse
+//
+// # Tensor Creation
+//
+// Create tensors using constructor functions:
+//
+//	t := tendo.FromSlice([]float32{1, 2, 3, 4, 5, 6}, 2, 3)
+//	zeros := tendo.Zeros(3, 4)
+//	ones := tendo.Ones(2, 2)
+//	rand := tendo.RandN(10, 10)
+//
+// # Operations
+//
+// Operations are organized into categories:
+//
+//   - Elementwise: [Add], [Sub], [Mul], [Div], [Abs], [Exp], [Log], [Sqrt], [Pow]
+//   - Matrix: [MatMul], [Transpose]
+//   - Shape: [Reshape], [Squeeze], [Unsqueeze], [Slice], [Expand], [Permute]
+//   - Reductions: [Sum], [Mean], [Max], [Min], [ArgMax], [ArgMin]
+//   - Activations: [ReLU], [Sigmoid], [Tanh], [GELU], [SiLU], [Softmax], [Dropout]
+//   - Normalization: [LayerNorm], [RMSNorm], [BatchNorm2d]
+//   - Convolution: [Conv2d]
+//
+// # Device Management
+//
+// Tensors can reside on CPU or CUDA devices:
+//
+//	tendo.SetDefaultDevice(tendo.CUDADevice(0))
+//	t := tendo.ZerosOn(tendo.CUDADevice(0), 1024, 1024)
+//	cpu := tendo.ToCPU(t)
+//	gpu := tendo.ToCUDA(t, 0)
+//
+// # Memory Pooling
+//
+// Use memory pools for efficient allocation reuse:
+//
+//	pool := tendo.NewPool()
+//	storage := pool.AllocCPU(1000, tendo.Float32)
+//	pool.FreeCPU(storage)
+//
+// # Pipeline Composition
+//
+// Operations return pipz.Chainable for composable computation graphs:
+//
+//	forward := pipz.Chain(
+//	    tendo.MatMul(weights),
+//	    tendo.Add(bias),
+//	    tendo.ReLU(),
+//	)
+//	result, err := forward.Run(ctx, input)
+//
+// # Backend Interface
+//
+// The [Backend] interface defines the contract for compute backends.
+// CPU backend is always available; CUDA backend requires GPU hardware.
+//
+// See [CoreBackend], [ArithmeticBackend], [MatrixBackend], [NeuralBackend],
+// [ReduceBackend], and [CompareBackend] for capability-specific interfaces.
 package tendo
 
 import (

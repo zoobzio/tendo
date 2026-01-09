@@ -1,382 +1,1006 @@
 package tendo
 
 import (
+	"context"
 	"fmt"
+
+	"github.com/zoobzio/pipz"
 )
 
-// Numel returns the total number of elements for a given shape.
-func Numel(shape []int) int {
-	if len(shape) == 0 {
-		return 1 // scalar
-	}
-	n := 1
-	for _, s := range shape {
-		n *= s
-	}
-	return n
+// Reshape is a chainable operator that reshapes a tensor.
+// The total number of elements must remain the same.
+// A single dimension can be -1, which will be inferred.
+// Backend-agnostic: creates a view or copies if non-contiguous.
+type Reshape struct {
+	identity pipz.Identity
+	shape    []int
 }
 
-// ComputeStrides computes the strides for a contiguous tensor with the given shape.
-// Strides are in row-major (C) order.
-func ComputeStrides(shape []int) []int {
-	if len(shape) == 0 {
-		return []int{}
+// NewReshape creates a Reshape operator.
+func NewReshape(shape ...int) *Reshape {
+	return &Reshape{
+		identity: IdentityReshape,
+		shape:    shape,
 	}
-
-	strides := make([]int, len(shape))
-	stride := 1
-	for i := len(shape) - 1; i >= 0; i-- {
-		strides[i] = stride
-		stride *= shape[i]
-	}
-	return strides
 }
 
-// IsContiguous returns true if the given shape and stride represent contiguous memory.
-func IsContiguous(shape, stride []int) bool {
-	if len(shape) != len(stride) {
-		return false
-	}
-	if len(shape) == 0 {
-		return true
+// Process reshapes the tensor.
+func (r *Reshape) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	newShape, err := InferShape(t.Numel(), r.shape)
+	if err != nil {
+		return nil, fmt.Errorf("reshape: %w", err)
 	}
 
-	expected := ComputeStrides(shape)
-	for i := range stride {
-		if stride[i] != expected[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// InferShape infers the full shape when one dimension is -1.
-// Returns an error if more than one -1 is present or if the shape is invalid.
-func InferShape(numel int, shape []int) ([]int, error) {
-	result := make([]int, len(shape))
-	inferIdx := -1
-	product := 1
-
-	for i, s := range shape {
-		if s == -1 {
-			if inferIdx != -1 {
-				return nil, fmt.Errorf("can only infer one dimension, found -1 at indices %d and %d", inferIdx, i)
-			}
-			inferIdx = i
-		} else if s <= 0 {
-			return nil, fmt.Errorf("invalid dimension %d at index %d", s, i)
-		} else {
-			result[i] = s
-			product *= s
+	if Numel(newShape) != t.Numel() {
+		return nil, &ShapeError{
+			Op:      "reshape",
+			ShapeA:  t.Shape(),
+			ShapeB:  newShape,
+			Message: fmt.Sprintf("cannot reshape %v to %v: element count mismatch", t.Shape(), newShape),
 		}
 	}
 
-	if inferIdx == -1 {
-		copy(result, shape)
+	// If contiguous, create a view
+	if t.IsContiguous() {
+		result := &Tensor{
+			storage: t.storage,
+			shape:   newShape,
+			stride:  ComputeStrides(newShape),
+			offset:  t.offset,
+		}
+
+		emitWithTrace(ctx, OpReshape,
+			KeyInput.Field(t),
+			KeyOutput.Field(result),
+			KeyShape.Field(newShape),
+		)
+
+
 		return result, nil
 	}
 
-	if numel%product != 0 {
-		return nil, fmt.Errorf("cannot infer dimension: %d elements not divisible by %d", numel, product)
-	}
+	// Non-contiguous: must copy data
+	result := t.Contiguous()
+	result.shape = newShape
+	result.stride = ComputeStrides(newShape)
 
-	result[inferIdx] = numel / product
-	return result, nil
-}
+	emitWithTrace(ctx, OpReshape,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyShape.Field(newShape),
+	)
 
-// BroadcastShapes computes the broadcast shape of two shapes.
-// Returns an error if the shapes are not broadcastable.
-func BroadcastShapes(a, b []int) ([]int, error) {
-	if !CanBroadcast(a, b) {
-		return nil, fmt.Errorf("shapes %v and %v are not broadcastable", a, b)
-	}
-
-	// Result has the max number of dimensions
-	maxDim := len(a)
-	if len(b) > maxDim {
-		maxDim = len(b)
-	}
-
-	result := make([]int, maxDim)
-
-	// Work from the right
-	for i := 0; i < maxDim; i++ {
-		ai := len(a) - 1 - i
-		bi := len(b) - 1 - i
-		ri := maxDim - 1 - i
-
-		var da, db = 1, 1
-		if ai >= 0 {
-			da = a[ai]
-		}
-		if bi >= 0 {
-			db = b[bi]
-		}
-
-		if da == db {
-			result[ri] = da
-		} else if da == 1 {
-			result[ri] = db
-		} else if db == 1 {
-			result[ri] = da
-		}
-		// CanBroadcast already verified this is valid
-	}
 
 	return result, nil
 }
 
-// CanBroadcast returns true if two shapes can be broadcast together.
-func CanBroadcast(a, b []int) bool {
-	// Work from the right
-	for i := 0; i < len(a) || i < len(b); i++ {
-		ai := len(a) - 1 - i
-		bi := len(b) - 1 - i
+// Identity returns the operator identity.
+func (r *Reshape) Identity() pipz.Identity { return r.identity }
 
-		var da, db = 1, 1
-		if ai >= 0 {
-			da = a[ai]
-		}
-		if bi >= 0 {
-			db = b[bi]
-		}
+// Schema returns the operator schema.
+func (r *Reshape) Schema() pipz.Node { return pipz.Node{Identity: r.identity, Type: "operator"} }
 
-		if da != db && da != 1 && db != 1 {
-			return false
-		}
-	}
-	return true
+// Close releases any resources held by this operator.
+func (r *Reshape) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Reshape)(nil)
+
+// View is a chainable operator that creates a view with the given shape.
+// The tensor must be contiguous. Use Reshape for non-contiguous tensors.
+// Backend-agnostic.
+type View struct {
+	identity pipz.Identity
+	shape    []int
 }
 
-// ValidateMatMul validates shapes for matrix multiplication and returns the output shape.
-// Supports 2D matrices and batched matrix multiplication.
-func ValidateMatMul(a, b []int) ([]int, error) {
-	if len(a) < 2 || len(b) < 2 {
-		return nil, fmt.Errorf("matmul requires at least 2D tensors, got %dD and %dD", len(a), len(b))
+// NewView creates a View operator.
+func NewView(shape ...int) *View {
+	return &View{
+		identity: IdentityView,
+		shape:    shape,
+	}
+}
+
+// Process creates a view of the tensor.
+func (v *View) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	if !t.IsContiguous() {
+		return nil, &ShapeError{
+			Op:      "view",
+			ShapeA:  t.Shape(),
+			Message: "view requires contiguous tensor",
+		}
 	}
 
-	// Get the matrix dimensions (last two dims)
-	m, k1 := a[len(a)-2], a[len(a)-1]
-	k2, n := b[len(b)-2], b[len(b)-1]
-
-	if k1 != k2 {
-		return nil, fmt.Errorf("matmul dimension mismatch: %v x %v (inner dims %d != %d)", a, b, k1, k2)
-	}
-
-	// Handle batch dimensions
-	batchA := a[:len(a)-2]
-	batchB := b[:len(b)-2]
-
-	batchOut, err := BroadcastShapes(batchA, batchB)
+	newShape, err := InferShape(t.Numel(), v.shape)
 	if err != nil {
-		return nil, fmt.Errorf("matmul batch dimensions not broadcastable: %w", err)
+		return nil, fmt.Errorf("view: %w", err)
 	}
 
-	result := make([]int, len(batchOut)+2)
-	copy(result, batchOut)
-	result[len(result)-2] = m
-	result[len(result)-1] = n
+	if Numel(newShape) != t.Numel() {
+		return nil, &ShapeError{
+			Op:      "view",
+			ShapeA:  t.Shape(),
+			ShapeB:  newShape,
+			Message: fmt.Sprintf("cannot view %v as %v: element count mismatch", t.Shape(), newShape),
+		}
+	}
+
+	result := &Tensor{
+		storage: t.storage,
+		shape:   newShape,
+		stride:  ComputeStrides(newShape),
+		offset:  t.offset,
+	}
+
+	emitWithTrace(ctx, OpReshape,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyShape.Field(newShape),
+	)
+
 
 	return result, nil
 }
 
-// ValidateElementwise validates shapes for element-wise operations and returns the output shape.
-func ValidateElementwise(a, b []int) ([]int, error) {
-	return BroadcastShapes(a, b)
+// Identity returns the operator identity.
+func (v *View) Identity() pipz.Identity { return v.identity }
+
+// Schema returns the operator schema.
+func (v *View) Schema() pipz.Node { return pipz.Node{Identity: v.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (v *View) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*View)(nil)
+
+// Squeeze is a chainable operator that removes dimensions of size 1.
+// If dim is specified, only that dimension is squeezed (if size 1).
+// Backend-agnostic.
+type Squeeze struct {
+	dim      *int // nil means squeeze all dimensions of size 1
+	identity pipz.Identity
 }
 
-// TransposeShape returns the shape after transposing two dimensions.
-func TransposeShape(shape []int, dim0, dim1 int) ([]int, error) {
-	dim0, dim1, err := normalizeDims(len(shape), dim0, dim1)
-	if err != nil {
-		return nil, err
+// NewSqueeze creates a Squeeze operator that squeezes all size-1 dimensions.
+func NewSqueeze() *Squeeze {
+	return &Squeeze{
+		identity: IdentitySqueeze,
+		dim:      nil,
+	}
+}
+
+// NewSqueezeDim creates a Squeeze operator that squeezes a specific dimension.
+func NewSqueezeDim(dim int) *Squeeze {
+	return &Squeeze{
+		identity: IdentitySqueeze,
+		dim:      &dim,
+	}
+}
+
+// Process squeezes the tensor.
+func (s *Squeeze) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	shape := t.Shape()
+	stride := t.Stride()
+
+	var newShape, newStride []int
+
+	if s.dim == nil {
+		// Squeeze all dimensions of size 1
+		for i, sz := range shape {
+			if sz != 1 {
+				newShape = append(newShape, sz)
+				newStride = append(newStride, stride[i])
+			}
+		}
+	} else {
+		// Squeeze specific dimension
+		d := *s.dim
+		if d < 0 {
+			d = len(shape) + d
+		}
+		if d < 0 || d >= len(shape) {
+			return nil, &ShapeError{Op: "squeeze", Message: "dimension out of range"}
+		}
+
+		for i, sz := range shape {
+			if i == d && sz == 1 {
+				continue // skip this dimension
+			}
+			newShape = append(newShape, sz)
+			newStride = append(newStride, stride[i])
+		}
 	}
 
-	result := make([]int, len(shape))
-	copy(result, shape)
-	result[dim0], result[dim1] = result[dim1], result[dim0]
+	// Handle scalar case
+	if len(newShape) == 0 {
+		newShape = []int{}
+		newStride = []int{}
+	}
+
+	result := &Tensor{
+		storage: t.storage,
+		shape:   newShape,
+		stride:  newStride,
+		offset:  t.offset,
+	}
+
+	emitWithTrace(ctx, OpSqueeze,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyShape.Field(newShape),
+	)
+
+
 	return result, nil
 }
 
-// TransposeStride returns the strides after transposing two dimensions.
-func TransposeStride(stride []int, dim0, dim1 int) ([]int, error) {
-	dim0, dim1, err := normalizeDims(len(stride), dim0, dim1)
-	if err != nil {
-		return nil, err
-	}
+// Identity returns the operator identity.
+func (s *Squeeze) Identity() pipz.Identity { return s.identity }
 
-	result := make([]int, len(stride))
-	copy(result, stride)
-	result[dim0], result[dim1] = result[dim1], result[dim0]
-	return result, nil
+// Schema returns the operator schema.
+func (s *Squeeze) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (s *Squeeze) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Squeeze)(nil)
+
+// Unsqueeze is a chainable operator that inserts a dimension of size 1.
+// Backend-agnostic.
+type Unsqueeze struct {
+	identity pipz.Identity
+	dim      int
 }
 
-// SqueezeShape removes a dimension of size 1 from the shape.
-func SqueezeShape(shape []int, dim int) ([]int, error) {
-	if dim < 0 {
-		dim = len(shape) + dim
+// NewUnsqueeze creates an Unsqueeze operator.
+func NewUnsqueeze(dim int) *Unsqueeze {
+	return &Unsqueeze{
+		identity: IdentityUnsqueeze,
+		dim:      dim,
 	}
-	if dim < 0 || dim >= len(shape) {
-		return nil, fmt.Errorf("dimension %d out of range for shape %v", dim, shape)
-	}
-	if shape[dim] != 1 {
-		return nil, fmt.Errorf("cannot squeeze dimension %d with size %d (must be 1)", dim, shape[dim])
-	}
-
-	result := make([]int, 0, len(shape)-1)
-	result = append(result, shape[:dim]...)
-	result = append(result, shape[dim+1:]...)
-	return result, nil
 }
 
-// UnsqueezeShape inserts a dimension of size 1 at the given position.
-func UnsqueezeShape(shape []int, dim int) ([]int, error) {
+// Process unsqueezes the tensor.
+func (u *Unsqueeze) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	shape := t.Shape()
+	stride := t.Stride()
+	dim := u.dim
+
+	// Normalize dimension (can be 0 to len(shape) inclusive)
 	if dim < 0 {
 		dim = len(shape) + dim + 1
 	}
 	if dim < 0 || dim > len(shape) {
-		return nil, fmt.Errorf("dimension %d out of range for unsqueeze on shape %v", dim, shape)
+		return nil, &ShapeError{Op: "unsqueeze", Message: "dimension out of range"}
 	}
 
-	result := make([]int, len(shape)+1)
-	copy(result[:dim], shape[:dim])
-	result[dim] = 1
-	copy(result[dim+1:], shape[dim:])
+	newShape := make([]int, len(shape)+1)
+	newStride := make([]int, len(shape)+1)
+
+	// Compute stride for new dimension
+	newDimStride := 1
+	if dim < len(shape) && len(stride) > 0 {
+		newDimStride = stride[dim] * shape[dim]
+	} else if len(stride) > 0 {
+		newDimStride = 1
+	}
+
+	for i := 0; i < dim; i++ {
+		newShape[i] = shape[i]
+		newStride[i] = stride[i]
+	}
+	newShape[dim] = 1
+	newStride[dim] = newDimStride
+	for i := dim; i < len(shape); i++ {
+		newShape[i+1] = shape[i]
+		newStride[i+1] = stride[i]
+	}
+
+	result := &Tensor{
+		storage: t.storage,
+		shape:   newShape,
+		stride:  newStride,
+		offset:  t.offset,
+	}
+
+	emitWithTrace(ctx, OpUnsqueeze,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyShape.Field(newShape),
+	)
+
+
 	return result, nil
 }
 
-// normalizeDims normalizes two dimension indices and validates them.
-func normalizeDims(ndim, dim0, dim1 int) (int, int, error) {
-	if dim0 < 0 {
-		dim0 = ndim + dim0
-	}
-	if dim1 < 0 {
-		dim1 = ndim + dim1
-	}
-	if dim0 < 0 || dim0 >= ndim {
-		return 0, 0, fmt.Errorf("dimension %d out of range for %d dimensions", dim0, ndim)
-	}
-	if dim1 < 0 || dim1 >= ndim {
-		return 0, 0, fmt.Errorf("dimension %d out of range for %d dimensions", dim1, ndim)
-	}
-	return dim0, dim1, nil
+// Identity returns the operator identity.
+func (u *Unsqueeze) Identity() pipz.Identity { return u.identity }
+
+// Schema returns the operator schema.
+func (u *Unsqueeze) Schema() pipz.Node { return pipz.Node{Identity: u.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (u *Unsqueeze) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Unsqueeze)(nil)
+
+// Flatten is a chainable operator that flattens dimensions from startDim to endDim.
+// Backend-agnostic.
+type Flatten struct {
+	identity pipz.Identity
+	startDim int
+	endDim   int
 }
 
-// FlatToStrided converts a flat (contiguous) index to a strided storage index.
-// This handles non-contiguous tensors by computing the physical storage location
-// from a logical element position.
-func FlatToStrided(flat int, shape, stride []int, offset int) int {
-	idx := offset
-	tmp := flat
-	for d := len(shape) - 1; d >= 0; d-- {
-		coord := tmp % shape[d]
-		tmp /= shape[d]
-		idx += coord * stride[d]
-	}
-	return idx
-}
-
-// FlatToCoords converts a flat index to multi-dimensional coordinates.
-func FlatToCoords(flat int, shape []int) []int {
-	coords := make([]int, len(shape))
-	tmp := flat
-	for d := len(shape) - 1; d >= 0; d-- {
-		coords[d] = tmp % shape[d]
-		tmp /= shape[d]
-	}
-	return coords
-}
-
-// CoordsToFlat converts multi-dimensional coordinates to a flat index using strides.
-func CoordsToFlat(coords, strides []int) int {
-	idx := 0
-	for d := 0; d < len(coords); d++ {
-		idx += coords[d] * strides[d]
-	}
-	return idx
-}
-
-// IterateStrided calls fn for each element, providing both the logical flat index
-// and the physical strided storage index. Useful for iterating non-contiguous tensors.
-func IterateStrided(numel int, shape, stride []int, offset int, fn func(flatIdx, stridedIdx int)) {
-	for i := 0; i < numel; i++ {
-		fn(i, FlatToStrided(i, shape, stride, offset))
+// NewFlatten creates a Flatten operator.
+func NewFlatten(startDim, endDim int) *Flatten {
+	return &Flatten{
+		identity: IdentityFlatten,
+		startDim: startDim,
+		endDim:   endDim,
 	}
 }
 
-// FlatToReducedIndex maps an input flat index to an output index after removing
-// specified dimensions. strides should be from ComputeStrides(shape) for contiguous data.
-// skipDims is a set of dimensions to exclude from the output index.
-func FlatToReducedIndex(flat int, shape, strides, outStrides []int, skipDims map[int]bool) int {
-	outIdx := 0
-	outDimIdx := 0
-	tmp := flat
-	for d := 0; d < len(shape); d++ {
-		coord := tmp / strides[d]
-		tmp %= strides[d]
-		if !skipDims[d] {
-			if outDimIdx < len(outStrides) {
-				outIdx += coord * outStrides[outDimIdx]
-			}
-			outDimIdx++
-		}
+// Process flattens the tensor.
+func (f *Flatten) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	shape := t.Shape()
+	ndim := len(shape)
+	startDim := f.startDim
+	endDim := f.endDim
+
+	// Normalize dimensions
+	if startDim < 0 {
+		startDim = ndim + startDim
 	}
-	return outIdx
+	if endDim < 0 {
+		endDim = ndim + endDim
+	}
+	if startDim < 0 || startDim >= ndim || endDim < 0 || endDim >= ndim || startDim > endDim {
+		return nil, &ShapeError{Op: "flatten", Message: "invalid dimension range"}
+	}
+
+	// Compute flattened size
+	flatSize := 1
+	for i := startDim; i <= endDim; i++ {
+		flatSize *= shape[i]
+	}
+
+	// Build new shape
+	newShape := make([]int, 0, ndim-(endDim-startDim))
+	for i := 0; i < startDim; i++ {
+		newShape = append(newShape, shape[i])
+	}
+	newShape = append(newShape, flatSize)
+	for i := endDim + 1; i < ndim; i++ {
+		newShape = append(newShape, shape[i])
+	}
+
+	// Must be contiguous for flatten
+	src := t
+	if !t.IsContiguous() {
+		src = t.Contiguous()
+	}
+
+	result := &Tensor{
+		storage: src.storage,
+		shape:   newShape,
+		stride:  ComputeStrides(newShape),
+		offset:  src.offset,
+	}
+
+	emitWithTrace(ctx, OpReshape,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyShape.Field(newShape),
+	)
+
+
+	return result, nil
 }
 
-// ReduceShapeAndStrides computes the output shape and strides after removing dimensions.
-func ReduceShapeAndStrides(shape []int, skipDims map[int]bool) (outShape, outStrides []int) {
-	for i, s := range shape {
-		if !skipDims[i] {
-			outShape = append(outShape, s)
-		}
-	}
-	if len(outShape) == 0 {
-		outShape = []int{}
-	}
-	outStrides = ComputeStrides(outShape)
-	return
+// Identity returns the operator identity.
+func (f *Flatten) Identity() pipz.Identity { return f.identity }
+
+// Schema returns the operator schema.
+func (f *Flatten) Schema() pipz.Node { return pipz.Node{Identity: f.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (f *Flatten) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Flatten)(nil)
+
+// Slice is a chainable operator that extracts a slice along a dimension.
+// start is inclusive, end is exclusive. Backend-agnostic.
+type Slice struct {
+	identity pipz.Identity
+	dim      int
+	start    int
+	end      int
 }
 
-// SliceBaseIndex computes the base storage index for a slice along a dimension.
-// sliceIdx is the index in the reduced shape (with dim removed), and the returned
-// baseIdx is the starting position in storage for iterating along dim.
-func SliceBaseIndex(sliceIdx int, shape, strides []int, dim int) int {
-	baseIdx := 0
-	tmp := sliceIdx
-	// Build reduced shape (excluding dim)
-	reducedIdx := 0
-	for d := len(shape) - 1; d >= 0; d-- {
-		if d == dim {
-			continue
-		}
-		// Compute size of remaining reduced dimensions
-		reducedSize := 1
-		for dd := d + 1; dd < len(shape); dd++ {
-			if dd != dim {
-				reducedSize *= shape[dd]
-			}
-		}
-		if reducedSize > 0 {
-			coord := tmp / reducedSize
-			tmp %= reducedSize
-			baseIdx += coord * strides[d]
-		}
-		reducedIdx++
+// NewSlice creates a Slice operator.
+func NewSlice(dim, start, end int) *Slice {
+	return &Slice{
+		identity: IdentitySlice,
+		dim:      dim,
+		start:    start,
+		end:      end,
 	}
-	return baseIdx
 }
 
-// IterateSlices iterates over all slices along a dimension.
-// For each slice, calls fn with the base storage index and dim stride.
-// Use: for j := 0; j < shape[dim]; j++ { idx := baseIdx + j*dimStride }.
-func IterateSlices(shape, strides []int, dim int, fn func(baseIdx, dimStride int)) {
+// Process slices the tensor.
+func (sl *Slice) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	shape := t.Shape()
+	stride := t.Stride()
+	dim := sl.dim
+	start := sl.start
+	end := sl.end
+
+	// Normalize dimension
+	if dim < 0 {
+		dim = len(shape) + dim
+	}
+	if dim < 0 || dim >= len(shape) {
+		return nil, &ShapeError{Op: "slice", Message: "dimension out of range"}
+	}
+
 	dimSize := shape[dim]
-	numSlices := Numel(shape) / dimSize
-	dimStride := strides[dim]
 
-	for i := 0; i < numSlices; i++ {
-		baseIdx := SliceBaseIndex(i, shape, strides, dim)
-		fn(baseIdx, dimStride)
+	// Normalize start/end
+	if start < 0 {
+		start = dimSize + start
+	}
+	if end < 0 {
+		end = dimSize + end
+	}
+	if start < 0 {
+		start = 0
+	}
+	if end > dimSize {
+		end = dimSize
+	}
+	if start >= end {
+		return nil, &ShapeError{Op: "slice", Message: "empty slice"}
+	}
+
+	// Compute new shape and offset
+	newShape := make([]int, len(shape))
+	copy(newShape, shape)
+	newShape[dim] = end - start
+
+	newOffset := t.offset + start*stride[dim]
+
+	result := &Tensor{
+		storage: t.storage,
+		shape:   newShape,
+		stride:  stride, // stride unchanged
+		offset:  newOffset,
+	}
+
+	emitWithTrace(ctx, OpSlice,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyDim.Field(dim),
+		KeyStart.Field(start),
+		KeyEnd.Field(end),
+	)
+
+
+	return result, nil
+}
+
+// Identity returns the operator identity.
+func (sl *Slice) Identity() pipz.Identity { return sl.identity }
+
+// Schema returns the operator schema.
+func (sl *Slice) Schema() pipz.Node { return pipz.Node{Identity: sl.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (sl *Slice) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Slice)(nil)
+
+// Narrow is an alias for Slice. Backend-agnostic.
+type Narrow struct {
+	identity pipz.Identity
+	dim      int
+	start    int
+	length   int
+}
+
+// NewNarrow creates a Narrow operator.
+func NewNarrow(dim, start, length int) *Narrow {
+	return &Narrow{
+		identity: IdentityNarrow,
+		dim:      dim,
+		start:    start,
+		length:   length,
 	}
 }
+
+// Process narrows the tensor.
+func (n *Narrow) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	slice := NewSlice(n.dim, n.start, n.start+n.length)
+	return slice.Process(ctx, t)
+}
+
+// Identity returns the operator identity.
+func (n *Narrow) Identity() pipz.Identity { return n.identity }
+
+// Schema returns the operator schema.
+func (n *Narrow) Schema() pipz.Node { return pipz.Node{Identity: n.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (n *Narrow) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Narrow)(nil)
+
+// Expand is a chainable operator that expands singleton dimensions.
+// The tensor is not copied; stride is set to 0 for expanded dimensions.
+// Backend-agnostic.
+type Expand struct {
+	identity pipz.Identity
+	shape    []int
+}
+
+// NewExpand creates an Expand operator.
+func NewExpand(shape ...int) *Expand {
+	return &Expand{
+		identity: IdentityExpand,
+		shape:    shape,
+	}
+}
+
+// Process expands the tensor.
+func (e *Expand) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	srcShape := t.Shape()
+	srcStride := t.Stride()
+
+	// Shapes must be broadcastable
+	if len(e.shape) < len(srcShape) {
+		return nil, &ShapeError{
+			Op:      "expand",
+			ShapeA:  srcShape,
+			ShapeB:  e.shape,
+			Message: "expanded shape must have at least as many dimensions",
+		}
+	}
+
+	// Pad source shape/stride with leading 1s
+	offset := len(e.shape) - len(srcShape)
+	paddedShape := make([]int, len(e.shape))
+	paddedStride := make([]int, len(e.shape))
+	for i := 0; i < offset; i++ {
+		paddedShape[i] = 1
+		paddedStride[i] = 0
+	}
+	for i := 0; i < len(srcShape); i++ {
+		paddedShape[offset+i] = srcShape[i]
+		paddedStride[offset+i] = srcStride[i]
+	}
+
+	// Compute new stride
+	newStride := make([]int, len(e.shape))
+	for i := 0; i < len(e.shape); i++ {
+		switch paddedShape[i] {
+		case e.shape[i]:
+			newStride[i] = paddedStride[i]
+		case 1:
+			newStride[i] = 0 // broadcast
+		default:
+			return nil, &ShapeError{
+				Op:      "expand",
+				ShapeA:  srcShape,
+				ShapeB:  e.shape,
+				Message: fmt.Sprintf("cannot expand dimension %d from %d to %d", i, paddedShape[i], e.shape[i]),
+			}
+		}
+	}
+
+	result := &Tensor{
+		storage: t.storage,
+		shape:   e.shape,
+		stride:  newStride,
+		offset:  t.offset,
+	}
+
+	emitWithTrace(ctx, OpExpand,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyShape.Field(e.shape),
+	)
+
+
+	return result, nil
+}
+
+// Identity returns the operator identity.
+func (e *Expand) Identity() pipz.Identity { return e.identity }
+
+// Schema returns the operator schema.
+func (e *Expand) Schema() pipz.Node { return pipz.Node{Identity: e.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (e *Expand) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Expand)(nil)
+
+// Permute is a chainable operator that permutes dimensions.
+// Backend-agnostic.
+type Permute struct {
+	identity pipz.Identity
+	dims     []int
+}
+
+// NewPermute creates a Permute operator.
+func NewPermute(dims ...int) *Permute {
+	return &Permute{
+		identity: IdentityPermute,
+		dims:     dims,
+	}
+}
+
+// Process permutes the tensor dimensions.
+func (p *Permute) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	shape := t.Shape()
+	stride := t.Stride()
+
+	if len(p.dims) != len(shape) {
+		return nil, &ShapeError{
+			Op:      "permute",
+			Message: fmt.Sprintf("permute requires %d dimensions, got %d", len(shape), len(p.dims)),
+		}
+	}
+
+	// Validate permutation
+	seen := make([]bool, len(p.dims))
+	for _, d := range p.dims {
+		dim := d
+		if dim < 0 {
+			dim = len(shape) + dim
+		}
+		if dim < 0 || dim >= len(shape) || seen[dim] {
+			return nil, &ShapeError{Op: "permute", Message: "invalid permutation"}
+		}
+		seen[dim] = true
+	}
+
+	newShape := make([]int, len(shape))
+	newStride := make([]int, len(stride))
+	for i, d := range p.dims {
+		dim := d
+		if dim < 0 {
+			dim = len(shape) + dim
+		}
+		newShape[i] = shape[dim]
+		newStride[i] = stride[dim]
+	}
+
+	result := &Tensor{
+		storage: t.storage,
+		shape:   newShape,
+		stride:  newStride,
+		offset:  t.offset,
+	}
+
+	emitWithTrace(ctx, OpPermute,
+		KeyInput.Field(t),
+		KeyOutput.Field(result),
+		KeyShape.Field(newShape),
+		KeyPermutation.Field(p.dims),
+	)
+
+
+	return result, nil
+}
+
+// Identity returns the operator identity.
+func (p *Permute) Identity() pipz.Identity { return p.identity }
+
+// Schema returns the operator schema.
+func (p *Permute) Schema() pipz.Node { return pipz.Node{Identity: p.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (p *Permute) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Permute)(nil)
+
+// Cat is a chainable operator that concatenates tensors along a dimension.
+// All tensors must have the same shape except in the concatenation dimension.
+type Cat struct {
+	identity pipz.Identity
+	backend  ShapeOps
+	tensors  []*Tensor
+	dim      int
+}
+
+// NewCat creates a Cat operator.
+// If backend is nil, uses CPU-only fallback implementation.
+func NewCat(backend ShapeOps, tensors []*Tensor, dim int) *Cat {
+	return &Cat{
+		identity: IdentityCat,
+		backend:  backend,
+		tensors:  tensors,
+		dim:      dim,
+	}
+}
+
+// Process concatenates tensors.
+func (c *Cat) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	// Prepend the input tensor to the list
+	allTensors := make([]*Tensor, 0, len(c.tensors)+1)
+	allTensors = append(allTensors, t)
+	allTensors = append(allTensors, c.tensors...)
+
+	if len(allTensors) == 0 {
+		return nil, &ShapeError{Op: "cat", Message: "cat requires at least one tensor"}
+	}
+
+	// If backend is available, delegate to it
+	if c.backend != nil {
+		result, err := c.backend.Cat(ctx, allTensors, c.dim)
+		if err != nil {
+			return nil, fmt.Errorf("cat: %w", err)
+		}
+
+		emitWithTrace(ctx, OpCat,
+			KeyInputs.Field(allTensors),
+			KeyOutput.Field(result),
+			KeyDim.Field(c.dim),
+		)
+
+
+		return result, nil
+	}
+
+	// CPU-only fallback implementation
+	shape := allTensors[0].Shape()
+	ndim := len(shape)
+	dim := c.dim
+
+	// Normalize dimension
+	if dim < 0 {
+		dim = ndim + dim
+	}
+	if dim < 0 || dim >= ndim {
+		return nil, &ShapeError{Op: "cat", Message: "dimension out of range"}
+	}
+
+	// Validate all tensors have compatible shapes
+	totalSize := 0
+	for i, tensor := range allTensors {
+		tShape := tensor.Shape()
+		if len(tShape) != ndim {
+			return nil, &ShapeError{
+				Op:      "cat",
+				Message: fmt.Sprintf("tensor %d has %d dimensions, expected %d", i, len(tShape), ndim),
+			}
+		}
+		for d := 0; d < ndim; d++ {
+			if d == dim {
+				totalSize += tShape[d]
+			} else if tShape[d] != shape[d] {
+				return nil, &ShapeError{
+					Op:      "cat",
+					Message: fmt.Sprintf("tensor %d has size %d at dim %d, expected %d", i, tShape[d], d, shape[d]),
+				}
+			}
+		}
+	}
+
+	// Compute output shape
+	outShape := make([]int, ndim)
+	copy(outShape, shape)
+	outShape[dim] = totalSize
+
+	// Allocate output storage
+	outNumel := Numel(outShape)
+	outStorage := NewCPUStorageFromSlice(make([]float32, outNumel), allTensors[0].DType())
+	outData := outStorage.Data()
+
+	// Copy data from each tensor
+	outStrides := ComputeStrides(outShape)
+	offset := 0
+	for _, tensor := range allTensors {
+		src := tensor.Contiguous()
+		srcCPU, ok := src.storage.(CPUDataAccessor)
+		if !ok {
+			return nil, &DeviceError{Expected: CPU, Got: tensor.Device().Type}
+		}
+		srcData := srcCPU.Data()
+		srcShape := src.Shape()
+
+		// Copy this tensor's data into the output
+		copyTensorData(outData, srcData, outShape, srcShape, outStrides, dim, offset)
+		offset += srcShape[dim]
+	}
+
+	result := NewTensor(outStorage, outShape, nil)
+
+	emitWithTrace(ctx, OpCat,
+		KeyInputs.Field(allTensors),
+		KeyOutput.Field(result),
+		KeyDim.Field(dim),
+	)
+
+
+	return result, nil
+}
+
+// Identity returns the operator identity.
+func (c *Cat) Identity() pipz.Identity { return c.identity }
+
+// Schema returns the operator schema.
+func (c *Cat) Schema() pipz.Node { return pipz.Node{Identity: c.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (c *Cat) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Cat)(nil)
+
+// copyTensorData copies src tensor data into dst at the given offset along dim.
+func copyTensorData(dst, src []float32, dstShape, srcShape []int, dstStrides []int, dim, offset int) {
+	srcNumel := Numel(srcShape)
+
+	for i := 0; i < srcNumel; i++ {
+		// Convert flat index to multi-dimensional coordinates
+		coords := FlatToCoords(i, srcShape)
+
+		// Adjust coordinate for concat dimension
+		coords[dim] += offset
+
+		// Convert back to flat index in destination
+		dstIdx := CoordsToFlat(coords, dstStrides)
+
+		dst[dstIdx] = src[i]
+	}
+}
+
+// Stack is a chainable operator that stacks tensors along a new dimension.
+// All tensors must have identical shapes.
+type Stack struct {
+	identity pipz.Identity
+	backend  ShapeOps
+	tensors  []*Tensor
+	dim      int
+}
+
+// NewStack creates a Stack operator.
+// If backend is nil, uses CPU-only fallback implementation.
+func NewStack(backend ShapeOps, tensors []*Tensor, dim int) *Stack {
+	return &Stack{
+		identity: IdentityStack,
+		backend:  backend,
+		tensors:  tensors,
+		dim:      dim,
+	}
+}
+
+// Process stacks tensors.
+func (s *Stack) Process(ctx context.Context, t *Tensor) (*Tensor, error) {
+	// Prepend the input tensor to the list
+	allTensors := make([]*Tensor, 0, len(s.tensors)+1)
+	allTensors = append(allTensors, t)
+	allTensors = append(allTensors, s.tensors...)
+
+	if len(allTensors) == 0 {
+		return nil, &ShapeError{Op: "stack", Message: "stack requires at least one tensor"}
+	}
+
+	// If backend is available, delegate to it
+	if s.backend != nil {
+		result, err := s.backend.Stack(ctx, allTensors, s.dim)
+		if err != nil {
+			return nil, fmt.Errorf("stack: %w", err)
+		}
+
+		emitWithTrace(ctx, OpStack,
+			KeyInputs.Field(allTensors),
+			KeyOutput.Field(result),
+			KeyDim.Field(s.dim),
+		)
+
+
+		return result, nil
+	}
+
+	// CPU-only fallback implementation
+	shape := allTensors[0].Shape()
+	ndim := len(shape)
+	dim := s.dim
+
+	// Normalize dimension (can be 0 to ndim inclusive for new dim)
+	if dim < 0 {
+		dim = ndim + dim + 1
+	}
+	if dim < 0 || dim > ndim {
+		return nil, &ShapeError{Op: "stack", Message: "dimension out of range"}
+	}
+
+	// Validate all tensors have identical shapes
+	for i, tensor := range allTensors {
+		tShape := tensor.Shape()
+		if len(tShape) != ndim {
+			return nil, &ShapeError{
+				Op:      "stack",
+				Message: fmt.Sprintf("tensor %d has %d dimensions, expected %d", i, len(tShape), ndim),
+			}
+		}
+		for d := 0; d < ndim; d++ {
+			if tShape[d] != shape[d] {
+				return nil, &ShapeError{
+					Op:      "stack",
+					Message: fmt.Sprintf("tensor %d has size %d at dim %d, expected %d", i, tShape[d], d, shape[d]),
+				}
+			}
+		}
+	}
+
+	// Compute output shape: insert new dimension at 'dim'
+	outShape := make([]int, ndim+1)
+	for d := 0; d < dim; d++ {
+		outShape[d] = shape[d]
+	}
+	outShape[dim] = len(allTensors)
+	for d := dim; d < ndim; d++ {
+		outShape[d+1] = shape[d]
+	}
+
+	// Allocate output storage
+	outNumel := Numel(outShape)
+	outStorage := NewCPUStorageFromSlice(make([]float32, outNumel), allTensors[0].DType())
+	outData := outStorage.Data()
+
+	// Copy data from each tensor
+	outStrides := ComputeStrides(outShape)
+	tensorNumel := Numel(shape)
+	srcStrides := ComputeStrides(shape)
+
+	for ti, tensor := range allTensors {
+		src := tensor.Contiguous()
+		srcCPU, ok := src.storage.(CPUDataAccessor)
+		if !ok {
+			return nil, &DeviceError{Expected: CPU, Got: tensor.Device().Type}
+		}
+		srcData := srcCPU.Data()
+
+		for i := 0; i < tensorNumel; i++ {
+			// Convert flat index to coordinates in source
+			coords := FlatToCoords(i, shape)
+
+			// Build output coordinates with new dimension inserted at dim
+			outCoords := make([]int, ndim+1)
+			copy(outCoords[:dim], coords[:dim])
+			outCoords[dim] = ti
+			copy(outCoords[dim+1:], coords[dim:])
+
+			// Convert to flat indices
+			srcIdx := CoordsToFlat(coords, srcStrides)
+			dstIdx := CoordsToFlat(outCoords, outStrides)
+
+			outData[dstIdx] = srcData[srcIdx]
+		}
+	}
+
+	result := NewTensor(outStorage, outShape, nil)
+
+	emitWithTrace(ctx, OpStack,
+		KeyInputs.Field(allTensors),
+		KeyOutput.Field(result),
+		KeyDim.Field(dim),
+	)
+
+
+	return result, nil
+}
+
+// Identity returns the operator identity.
+func (s *Stack) Identity() pipz.Identity { return s.identity }
+
+// Schema returns the operator schema.
+func (s *Stack) Schema() pipz.Node { return pipz.Node{Identity: s.identity, Type: "operator"} }
+
+// Close releases any resources held by this operator.
+func (s *Stack) Close() error { return nil }
+
+var _ pipz.Chainable[*Tensor] = (*Stack)(nil)

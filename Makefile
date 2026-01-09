@@ -1,7 +1,6 @@
-.PHONY: test test-integration bench lint coverage clean all help check ci install-tools install-hooks
+.PHONY: test test-unit test-integration test-all bench lint lint-fix coverage clean all help check ci install-tools install-hooks
 
-# Default target
-all: test lint
+.DEFAULT_GOAL := help
 
 # Display help
 help:
@@ -10,9 +9,11 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test             - Run unit tests with race detector"
+	@echo "  make test-unit        - Run unit tests only (short mode)"
 	@echo "  make test-integration - Run integration tests"
 	@echo "  make test-all         - Run all tests (unit + integration)"
-	@echo "  make bench            - Run benchmarks"
+	@echo "  make test-bench       - Run benchmarks"
+	@echo "  make bench            - Run benchmarks (alias)"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make lint             - Run linters"
@@ -33,6 +34,11 @@ test:
 	@echo "Running unit tests..."
 	@go test -v -race ./...
 
+# Run unit tests only (short mode)
+test-unit:
+	@echo "Running unit tests (short mode)..."
+	@go test -v -race -short ./...
+
 # Run integration tests
 test-integration:
 	@echo "Running integration tests..."
@@ -45,6 +51,9 @@ test-all: test test-integration
 bench:
 	@echo "Running benchmarks..."
 	@go test -bench=. -benchmem -benchtime=1s ./...
+
+# Alias for bench
+test-bench: bench
 
 # Run linters
 lint:

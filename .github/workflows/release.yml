@@ -40,10 +40,28 @@ jobs:
           version: v2.7.2
           args: --config=.golangci.yml --timeout=5m
 
+  # Tag submodules before release
+  tag-submodules:
+    name: Tag Submodules
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag submodules
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          for mod in cpu cuda nn models testing; do
+            git tag "${mod}/${VERSION}"
+          done
+          git push origin --tags
+
   # Create the release using GoReleaser
   release:
     name: Create Release
-    needs: validate
+    needs: [validate, tag-submodules]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +86,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
 
       - name: Upload Release Assets
         uses: actions/upload-artifact@v4
@@ -108,6 +127,12 @@ jobs:
 
           # Verify it was fetched
           go list -m github.com/zoobzio/tendo
+
+          # Verify submodules can be fetched
+          for mod in cpu cuda nn models testing; do
+            go get github.com/zoobzio/tendo/${mod}@${{ steps.version.outputs.VERSION }}
+            go list -m github.com/zoobzio/tendo/${mod}
+          done
 
       - name: Create release summary
         run: |

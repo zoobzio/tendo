@@ -2,6 +2,8 @@ module github.com/zoobzio/tendo
 
 go 1.25.0
 
+toolchain go1.25.0
+
 require (
 	github.com/zoobzio/capitan v0.1.0
 	github.com/zoobzio/pipz v0.1.3
