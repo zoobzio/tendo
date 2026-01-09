@@ -1,8 +1,8 @@
 package cuda
 
 /*
-#cgo CFLAGS: -I/home/zoobzio/code/popcorn/include
-#cgo LDFLAGS: -L/home/zoobzio/code/popcorn/lib -lpopcorn -lcudart -lstdc++
+#cgo CFLAGS: -I/usr/include
+#cgo LDFLAGS: -L/usr/lib -lpopcorn -lcudart -lstdc++
 
 #include <popcorn.h>
 #include <stdlib.h>
