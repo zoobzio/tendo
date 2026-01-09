@@ -4,6 +4,7 @@ use (
 	.
 	./cpu
 	./cuda
+	./examples
 	./models
 	./nn
 	./testing
