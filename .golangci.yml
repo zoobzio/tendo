@@ -5,6 +5,9 @@ run:
   tests: true
   build-tags:
     - integration
+  exclude-dirs:
+    - cuda           # Requires CUDA SDK
+    - examples       # Examples may import cuda
 
 linters:
   enable:
@@ -55,12 +58,25 @@ linters:
           - dupl
           - govet
           - revive
+          - errcheck
 
       # Float16 conversions are intentionally bounded by IEEE 754 format
       - path: float16\.go
         linters:
           - gosec
         text: "G115"
+
+      # ML code uses math/rand intentionally (not crypto-sensitive)
+      - path: cpu/
+        linters:
+          - gosec
+        text: "G404"
+
+      # CPU backend methods implement tendo.Backend interface (docs on interface)
+      - path: cpu/
+        linters:
+          - revive
+        text: "exported:"
 
       # ifElseChain is stylistic and switch is not always clearer
       - linters:
@@ -79,9 +95,11 @@ linters:
 
     govet:
       enable-all: true
+      disable:
+        - printf  # Bug in golang.org/x/tools@v0.39.0 panics on CGO deps (github.com/daulet/tokenizers)
 
     errcheck:
-      check-type-assertions: true
+      check-type-assertions: false  # Type assertions should panic on failure (programming errors)
       check-blank: true
       exclude-functions:
         - (io.Closer).Close  # Handled by bodyclose
@@ -181,6 +199,3 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   new: false
-  exclude-dirs:
-    - cuda           # Requires CUDA SDK (cudnn.h)
-    - examples       # Examples may import cuda

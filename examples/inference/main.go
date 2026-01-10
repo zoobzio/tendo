@@ -1,3 +1,5 @@
+//go:build cuda
+
 // Package main provides an example inference CLI for Llama models.
 package main
 

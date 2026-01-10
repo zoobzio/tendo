@@ -134,5 +134,5 @@ func (s *Storage) Fill(value float32) {
 	}
 }
 
-// Compile-time check: Storage implements tendo.Storage
+// Compile-time check: Storage implements tendo.Storage.
 var _ tendo.Storage = (*Storage)(nil)

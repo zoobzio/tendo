@@ -10,6 +10,13 @@ import (
 	"github.com/zoobzio/tendo"
 )
 
+// Reduction modes for loss functions.
+const (
+	reductionNone = "none"
+	reductionSum  = "sum"
+	reductionMean = "mean"
+)
+
 // Backend implements tendo.Backend for CPU devices.
 type Backend struct{}
 
@@ -443,8 +450,14 @@ func (b *Backend) BatchNorm2d(ctx context.Context, input, weight, bias, runningM
 	inputData := cpuInput.Data()
 	result := make([]float32, len(inputData))
 
-	weightData, _ := weight.Data()
-	biasData, _ := bias.Data()
+	weightData, err := weight.Data()
+	if err != nil {
+		return nil, err
+	}
+	biasData, err := bias.Data()
+	if err != nil {
+		return nil, err
+	}
 
 	// For each channel, normalize
 	for c := 0; c < C; c++ {
@@ -477,8 +490,14 @@ func (b *Backend) BatchNorm2d(ctx context.Context, input, weight, bias, runningM
 			variance = sumSq / float32(batchSpatialSize)
 		} else {
 			// Use running statistics in eval mode
-			meanData, _ := runningMean.Data()
-			varData, _ := runningVar.Data()
+			meanData, errMean := runningMean.Data()
+			if errMean != nil {
+				return nil, errMean
+			}
+			varData, errVar := runningVar.Data()
+			if errVar != nil {
+				return nil, errVar
+			}
 			mean = meanData[c]
 			variance = varData[c]
 		}
@@ -531,10 +550,18 @@ func (b *Backend) LayerNorm(_ context.Context, input *tendo.Tensor, normalizedSh
 	// Handle optional weight and bias (default: weight=1, bias=0)
 	var weightData, biasData []float32
 	if weight != nil {
-		weightData, _ = weight.Data()
+		var err error
+		weightData, err = weight.Data()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if bias != nil {
-		biasData, _ = bias.Data()
+		var err error
+		biasData, err = bias.Data()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for outer := 0; outer < outerSize; outer++ {
@@ -593,7 +620,11 @@ func (b *Backend) RMSNorm(_ context.Context, input *tendo.Tensor, normalizedShap
 
 	var weightData []float32
 	if weight != nil {
-		weightData, _ = weight.Data()
+		var err error
+		weightData, err = weight.Data()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for outer := 0; outer < outerSize; outer++ {
@@ -647,10 +678,18 @@ func (b *Backend) GroupNorm(_ context.Context, input *tendo.Tensor, numGroups in
 
 	var weightData, biasData []float32
 	if weight != nil {
-		weightData, _ = weight.Data()
+		var err error
+		weightData, err = weight.Data()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if bias != nil {
-		biasData, _ = bias.Data()
+		var err error
+		biasData, err = bias.Data()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for n := 0; n < N; n++ {
@@ -724,10 +763,18 @@ func (b *Backend) InstanceNorm2d(_ context.Context, input, weight, bias *tendo.T
 
 	var weightData, biasData []float32
 	if weight != nil {
-		weightData, _ = weight.Data()
+		var err error
+		weightData, err = weight.Data()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if bias != nil {
-		biasData, _ = bias.Data()
+		var err error
+		biasData, err = bias.Data()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for n := 0; n < N; n++ {
@@ -802,8 +849,14 @@ func (b *Backend) Conv2d(_ context.Context, input, weight *tendo.Tensor, padding
 	outH := (inH+2*padding[0]-dilation[0]*(kH-1)-1)/stride[0] + 1
 	outW := (inW+2*padding[1]-dilation[1]*(kW-1)-1)/stride[1] + 1
 
-	cpuInput, _ := input.Storage().(tendo.CPUDataAccessor)
-	cpuWeight, _ := weight.Storage().(tendo.CPUDataAccessor)
+	cpuInput, ok := input.Storage().(tendo.CPUDataAccessor)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CPU, Got: input.Device().Type}
+	}
+	cpuWeight, ok := weight.Storage().(tendo.CPUDataAccessor)
+	if !ok {
+		return nil, &tendo.DeviceError{Expected: tendo.CPU, Got: weight.Device().Type}
+	}
 	inputData := cpuInput.Data()
 	weightData := cpuWeight.Data()
 
@@ -869,8 +922,8 @@ func (b *Backend) ConvTranspose2d(_ context.Context, input, weight *tendo.Tensor
 	outH := (inH-1)*stride[0] - 2*padding[0] + dilation[0]*(kH-1) + outputPadding[0] + 1
 	outW := (inW-1)*stride[1] - 2*padding[1] + dilation[1]*(kW-1) + outputPadding[1] + 1
 
-	cpuInput, _ := input.Storage().(tendo.CPUDataAccessor)
-	cpuWeight, _ := weight.Storage().(tendo.CPUDataAccessor)
+	cpuInput := input.Storage().(tendo.CPUDataAccessor)
+	cpuWeight := weight.Storage().(tendo.CPUDataAccessor)
 	inputData := cpuInput.Data()
 	weightData := cpuWeight.Data()
 
@@ -931,7 +984,7 @@ func (b *Backend) AdaptiveAvgPool2d(_ context.Context, input *tendo.Tensor, outp
 	N, C, inH, inW := inShape[0], inShape[1], inShape[2], inShape[3]
 	outH, outW := outputSize[0], outputSize[1]
 
-	cpu, _ := input.Storage().(tendo.CPUDataAccessor)
+	cpu := input.Storage().(tendo.CPUDataAccessor)
 	data := cpu.Data()
 	result := make([]float32, N*C*outH*outW)
 
@@ -980,7 +1033,7 @@ func (b *Backend) AdaptiveMaxPool2d(_ context.Context, input *tendo.Tensor, outp
 	N, C, inH, inW := inShape[0], inShape[1], inShape[2], inShape[3]
 	outH, outW := outputSize[0], outputSize[1]
 
-	cpu, _ := input.Storage().(tendo.CPUDataAccessor)
+	cpu := input.Storage().(tendo.CPUDataAccessor)
 	data := cpu.Data()
 	result := make([]float32, N*C*outH*outW)
 
@@ -1035,11 +1088,11 @@ func (b *Backend) MSELoss(ctx context.Context, input, target *tendo.Tensor, redu
 	}
 
 	switch reduction {
-	case "none":
+	case reductionNone:
 		return squared, nil
-	case "sum":
+	case reductionSum:
 		return b.Sum(ctx, squared, nil, false)
-	case "mean":
+	case reductionMean:
 		return b.Mean(ctx, squared, nil, false)
 	default:
 		return b.Mean(ctx, squared, nil, false)
@@ -1057,11 +1110,11 @@ func (b *Backend) L1Loss(ctx context.Context, input, target *tendo.Tensor, reduc
 	}
 
 	switch reduction {
-	case "none":
+	case reductionNone:
 		return absVal, nil
-	case "sum":
+	case reductionSum:
 		return b.Sum(ctx, absVal, nil, false)
-	case "mean":
+	case reductionMean:
 		return b.Mean(ctx, absVal, nil, false)
 	default:
 		return b.Mean(ctx, absVal, nil, false)
@@ -1086,8 +1139,8 @@ func (b *Backend) NLLLoss(_ context.Context, input, target *tendo.Tensor, reduct
 
 	N, C := inShape[0], inShape[1]
 
-	cpuInput, _ := input.Storage().(tendo.CPUDataAccessor)
-	cpuTarget, _ := target.Storage().(tendo.CPUDataAccessor)
+	cpuInput := input.Storage().(tendo.CPUDataAccessor)
+	cpuTarget := target.Storage().(tendo.CPUDataAccessor)
 
 	inputData := cpuInput.Data()
 	targetData := cpuTarget.Data()
@@ -1101,10 +1154,10 @@ func (b *Backend) NLLLoss(_ context.Context, input, target *tendo.Tensor, reduct
 	}
 
 	switch reduction {
-	case "none":
+	case reductionNone:
 		storage := NewStorageFromSlice(losses, input.DType())
 		return tendo.NewTensor(storage, []int{N}, nil), nil
-	case "sum":
+	case reductionSum:
 		sum := float32(0)
 		for _, l := range losses {
 			sum += l
@@ -1777,7 +1830,10 @@ func (b *Backend) computeVariance(t *tendo.Tensor, dims []int, keepdim bool, cor
 	variances := make([]float32, outNumel)
 	strides := tendo.ComputeStrides(shape)
 	outStrides := tendo.ComputeStrides(outShape)
-	meanData, _ := meanTensor.Data()
+	meanData, err := meanTensor.Data()
+	if err != nil {
+		return nil, err
+	}
 
 	for i := 0; i < len(data); i++ {
 		outIdx := tendo.FlatToReducedIndex(i, shape, strides, outStrides, normDims)
@@ -1814,7 +1870,7 @@ func (b *Backend) pool2d(input *tendo.Tensor, kernelSize, stride, padding [2]int
 	outH := (inH+2*padding[0]-kernelSize[0])/stride[0] + 1
 	outW := (inW+2*padding[1]-kernelSize[1])/stride[1] + 1
 
-	cpu, _ := input.Storage().(tendo.CPUDataAccessor)
+	cpu := input.Storage().(tendo.CPUDataAccessor)
 	data := cpu.Data()
 
 	result := make([]float32, N*C*outH*outW)
@@ -1976,23 +2032,6 @@ func shapesEqual(a, b []int) bool {
 	return true
 }
 
-func broadcastStrides(srcShape, targetShape []int) []int {
-	strides := make([]int, len(targetShape))
-	srcStrides := tendo.ComputeStrides(srcShape)
-
-	dimOffset := len(targetShape) - len(srcShape)
-	for i := 0; i < len(targetShape); i++ {
-		srcIdx := i - dimOffset
-		if srcIdx < 0 || srcShape[srcIdx] == 1 {
-			strides[i] = 0
-		} else {
-			strides[i] = srcStrides[srcIdx]
-		}
-	}
-
-	return strides
-}
-
 // broadcastStridesWithActual computes broadcast strides using the tensor's actual strides
 // instead of computing contiguous strides from shape. This handles non-contiguous tensors.
 func broadcastStridesWithActual(srcShape, actualStrides []int, targetShape []int) []int {
@@ -2011,5 +2050,5 @@ func broadcastStridesWithActual(srcShape, actualStrides []int, targetShape []int
 	return strides
 }
 
-// Compile-time check
+// Compile-time check.
 var _ tendo.Backend = (*Backend)(nil)

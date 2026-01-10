@@ -13,6 +13,6 @@ func blasMatMul2D(dataA, dataB, dataC []float32, m, k, n int) {
 	b := blas32.General{Rows: k, Cols: n, Stride: n, Data: dataB}
 	c := blas32.General{Rows: m, Cols: n, Stride: n, Data: dataC}
 
-	// C = 1.0 * A * B + 0.0 * C
+	// Gemm computes C = alpha*A*B + beta*C (alpha=1, beta=0).
 	blas32.Gemm(blas.NoTrans, blas.NoTrans, 1.0, a, b, 0.0, c)
 }

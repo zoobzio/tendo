@@ -35,10 +35,10 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        # Core library coverage
+        # Core library coverage (CUDA packages excluded via build tags)
         echo "=== Testing core library ==="
         go test -v -race -coverprofile=coverage-core.out -covermode=atomic \
-          -coverpkg=github.com/zoobzio/tendo $(go list ./... | grep -v '/testing/')
+          -coverpkg=github.com/zoobzio/tendo ./...
 
         # Generate coverage report
         go tool cover -func=coverage-core.out > coverage-summary.txt

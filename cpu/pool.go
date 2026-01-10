@@ -8,8 +8,8 @@ import (
 
 // PoolAllocator implements tendo.PoolAllocator for CPU memory.
 type PoolAllocator struct {
-	mu     sync.Mutex
 	blocks map[int][]*Storage // sizeClass -> available blocks
+	mu     sync.Mutex
 }
 
 // NewPoolAllocator creates a new CPU pool allocator.
@@ -79,5 +79,5 @@ func roundUpPow2(n int) int {
 	return n
 }
 
-// Compile-time check
+// Compile-time check.
 var _ tendo.PoolAllocator = (*PoolAllocator)(nil)

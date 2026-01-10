@@ -1,3 +1,5 @@
+//go:build cuda
+
 // Package cuda provides CUDA backend implementation for tendo.
 package cuda
 
