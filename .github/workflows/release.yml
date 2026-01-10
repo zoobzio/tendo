@@ -40,28 +40,10 @@ jobs:
           version: v2.7.2
           args: --config=.golangci.yml --timeout=5m
 
-  # Tag submodules before release
-  tag-submodules:
-    name: Tag Submodules
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Tag submodules
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          for mod in cpu cuda nn models testing; do
-            git tag "${mod}/${VERSION}"
-          done
-          git push origin --tags
-
   # Create the release using GoReleaser
   release:
     name: Create Release
-    needs: [validate, tag-submodules]
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -128,12 +110,6 @@ jobs:
           # Verify it was fetched
           go list -m github.com/zoobzio/tendo
 
-          # Verify submodules can be fetched
-          for mod in cpu cuda nn models testing; do
-            go get github.com/zoobzio/tendo/${mod}@${{ steps.version.outputs.VERSION }}
-            go list -m github.com/zoobzio/tendo/${mod}
-          done
-
       - name: Create release summary
         run: |
           echo "### Release ${{ steps.version.outputs.VERSION }} Published Successfully!" >> $GITHUB_STEP_SUMMARY
@@ -168,18 +144,18 @@ jobs:
               title: `Release ${version} - Post-Release Checklist`,
               body: `## Release ${version} has been published!
 
-              ### Post-Release Checklist
-              - [ ] Verify the release appears correctly on GitHub
-              - [ ] Test installation with \`go get github.com/zoobzio/tendo@${version}\`
-              - [ ] Update any example dependencies if needed
-              - [ ] Consider announcing the release if it contains significant changes
-              - [ ] Close any issues/PRs that were addressed in this release
+### Post-Release Checklist
+- [ ] Verify the release appears correctly on GitHub
+- [ ] Test installation with \`go get github.com/zoobzio/tendo@${version}\`
+- [ ] Update any example dependencies if needed
+- [ ] Consider announcing the release if it contains significant changes
+- [ ] Close any issues/PRs that were addressed in this release
 
-              ### Release URL
-              https://github.com/zoobzio/tendo/releases/tag/${version}
+### Release URL
+https://github.com/zoobzio/tendo/releases/tag/${version}
 
-              ---
-              This issue was automatically created by the release workflow.`,
+---
+This issue was automatically created by the release workflow.`,
               labels: ['release', 'documentation']
             });
             console.log(`Created issue #${issue.data.number}`);
