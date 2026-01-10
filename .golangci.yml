@@ -5,9 +5,6 @@ run:
   tests: true
   build-tags:
     - integration
-  exclude-dirs:
-    - cuda           # Requires CUDA SDK
-    - examples       # Examples may import cuda
 
 linters:
   enable:
